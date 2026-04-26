@@ -1,0 +1,236 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% load humanize %}
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- Header with branding and full date/time -->
+<div class="bg-primary text-white py-5 mb-5 text-center shadow">
+  <div class="container">
+    <h1 class="display-4 fw-bold mb-3">ES & RI EIBMS</h1>
+    <p class="lead mb-2">Integrated Business Management System</p>
+    <p class="fs-5 mb-0">
+      <i class="bi bi-calendar-event me-2"></i>
+      {{ today|date:"l, d F Y" }}  <!-- Saturday, 21 February 2026 -->
+      <i class="bi bi-person-circle ms-4 me-2"></i>
+      Welcome, {{ user.get_full_name|default:user.username }} 
+      ({{ user.role|title }}) 
+      {% if user.branch %} • {{ user.branch.name }}{% endif %}
+    </p>
+  </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row g-4 mb-5">
+
+  <!-- Low Stock -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card border-0 shadow h-100 bg-danger text-white">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Low Stock Alerts</h5>
+        <h3 class="card-text mb-0">{{ low_stock.count }}</h3>
+        {% if low_stock %}
+          <small class="d-block mt-2">
+            {% for p in low_stock|slice:":3" %}
+              {{ p.name }} ({{ p.current_stock }} / min {{ p.min_threshold }})<br>
+            {% endfor %}
+            {% if low_stock.count > 3 %}
+              ... +{{ low_stock.count|add:"-3" }} more
+            {% endif %}
+          </small>
+        {% else %}
+          <small class="d-block mt-2">All stock above minimum</small>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Today's Expenses -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card border-0 shadow h-100 bg-info text-white">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-cash-stack me-2"></i>Today's Expenses</h5>
+        <h3 class="card-text mb-0">{{ today_expenses|floatformat:0|intcomma }} TZS</h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- Truck Fleet -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card border-0 shadow h-100 bg-dark text-white">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-truck me-2"></i>Truck Fleet</h5>
+        <p class="mb-1"><strong>Total Profit:</strong> 
+          <span class="{% if truck_summary.total_profit >= 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
+            {{ truck_summary.total_profit|floatformat:0|intcomma }} TZS
+          </span>
+        </p>
+        <p class="mb-0"><strong>Total Distance:</strong> {{ truck_summary.total_km|intcomma }} km</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Today's Sales -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card border-0 shadow h-100 bg-success text-white">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-graph-up-arrow me-2"></i>Today's Sales</h5>
+        <h3 class="card-text mb-0">{{ today_sales|floatformat:0|intcomma }} TZS</h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overdue Credit -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card border-0 shadow h-100 bg-warning text-dark">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-exclamation-circle-fill me-2"></i>Overdue Credit</h5>
+        <h3 class="card-text mb-0">{{ overdue_customers }}</h3>
+        <p class="mb-0">Customers with balance due</p>
+        {% if overdue_customers > 0 %}
+          <div class="alert alert-warning mt-3 p-2 small">
+            <strong>Warning:</strong> {{ overdue_customers }} customer(s) have outstanding balance.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Quick Actions -->
+<div class="card mb-5 shadow-sm border-0">
+  <div class="card-body">
+    <h5 class="card-title mb-3"><i class="bi bi-rocket-takeoff-fill me-2 text-primary"></i>Quick Actions</h5>
+    <div class="d-grid gap-2 d-md-flex flex-wrap justify-content-md-start">
+      <a href="{% url 'expense_create' %}" class="btn btn-primary btn-lg flex-fill">
+        <i class="bi bi-plus-circle me-1"></i> Add Expense
+      </a>
+      <a href="{% url 'production_create' %}" class="btn btn-primary btn-lg flex-fill">
+        <i class="bi bi-hammer me-1"></i> Record Production
+      </a>
+      <a href="{% url 'sale_create' %}" class="btn btn-primary btn-lg flex-fill">
+        <i class="bi bi-cart-plus me-1"></i> Record Sale
+      </a>
+      <a href="{% url 'tra_expense_report' %}" class="btn btn-outline-primary btn-lg flex-fill">
+        <i class="bi bi-file-earmark-spreadsheet me-1"></i> TRA Expense Report
+      </a>
+      <a href="{% url 'sales_report' %}" class="btn btn-outline-primary btn-lg flex-fill">
+        <i class="bi bi-graph-up me-1"></i> Sales Report
+      </a>
+      <a href="{% url 'overdue_customers' %}" class="btn btn-outline-danger btn-lg flex-fill">
+        <i class="bi bi-exclamation-triangle me-1"></i> Overdue Customers
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row g-4">
+  <!-- Sales Trend Chart -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100 border-0">
+      <div class="card-header bg-info text-white">
+        <h5 class="mb-0"><i class="bi bi-graph-up-arrow me-2"></i>Monthly Sales Trend (TZS)</h5>
+      </div>
+      <div class="card-body">
+        {% if sales_labels %}
+          <canvas id="salesTrendChart" height="180"></canvas>
+
+          <script id="sales-labels" type="application/json">{{ sales_labels|safe }}</script>
+          <script id="sales-data" type="application/json">{{ sales_data|safe }}</script>
+
+          <script>
+          document.addEventListener('DOMContentLoaded', function () {
+            const ctx = document.getElementById('salesTrendChart').getContext('2d');
+            new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: JSON.parse(document.getElementById('sales-labels').textContent),
+                datasets: [{
+                  label: 'Monthly Sales (TZS)',
+                  data: JSON.parse(document.getElementById('sales-data').textContent),
+                  borderColor: '#0d6efd',
+                  backgroundColor: 'rgba(13, 110, 253, 0.2)',
+                  fill: true,
+                  tension: 0.3,
+                  pointBackgroundColor: '#0d6efd',
+                  pointBorderColor: '#fff',
+                  pointHoverRadius: 6,
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { position: 'top' } },
+                scales: {
+                  y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() + ' TZS' } },
+                  x: { title: { display: true, text: 'Month' } }
+                }
+              }
+            });
+          });
+          </script>
+        {% else %}
+          <p class="text-muted text-center">No sales data yet to display chart.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Expenses Trend Chart -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100 border-0">
+      <div class="card-header bg-danger text-white">
+        <h5 class="mb-0"><i class="bi bi-graph-down-arrow me-2"></i>Monthly Expenses Trend (TZS)</h5>
+      </div>
+      <div class="card-body">
+        {% if expenses_labels %}
+          <canvas id="expensesTrendChart" height="180"></canvas>
+
+          <script id="expenses-labels" type="application/json">{{ expenses_labels|safe }}</script>
+          <script id="expenses-data" type="application/json">{{ expenses_data|safe }}</script>
+
+          <script>
+          document.addEventListener('DOMContentLoaded', function () {
+            const ctx = document.getElementById('expensesTrendChart').getContext('2d');
+            new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: JSON.parse(document.getElementById('expenses-labels').textContent),
+                datasets: [{
+                  label: 'Monthly Expenses (TZS)',
+                  data: JSON.parse(document.getElementById('expenses-data').textContent),
+                  borderColor: '#dc3545',
+                  backgroundColor: 'rgba(220, 53, 69, 0.2)',
+                  fill: true,
+                  tension: 0.3,
+                  pointBackgroundColor: '#dc3545',
+                  pointBorderColor: '#fff',
+                  pointHoverRadius: 6,
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { position: 'top' } },
+                scales: {
+                  y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() + ' TZS' } },
+                  x: { title: { display: true, text: 'Month' } }
+                }
+              }
+            });
+          });
+          </script>
+        {% else %}
+          <p class="text-muted text-center">No expenses data yet to display chart.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

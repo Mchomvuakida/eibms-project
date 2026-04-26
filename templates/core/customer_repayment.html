@@ -1,0 +1,93 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+
+    <div class="card mb-4 border-0 shadow-sm">
+      <div class="card-header bg-white border-bottom">
+        <strong>Customer Balance</strong>
+      </div>
+      <div class="card-body">
+        <div class="row text-center">
+          <div class="col">
+            <div class="text-muted small">Customer</div>
+            <div class="fw-bold">{{ customer.name }}</div>
+          </div>
+          <div class="col">
+            <div class="text-muted small">Branch</div>
+            <div class="fw-bold">{{ customer.branch.name }}</div>
+          </div>
+          <div class="col">
+            <div class="text-muted small">Balance Owed</div>
+            <div class="fw-bold text-danger fs-5">{{ customer.balance_owed|floatformat:0 }} TZS</div>
+          </div>
+          <div class="col">
+            <div class="text-muted small">Credit Limit</div>
+            <div class="fw-bold">{{ customer.credit_limit|floatformat:0 }} TZS</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if customer.balance_owed > 0 %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-bottom">
+        <strong>Record Repayment</strong>
+      </div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label">Amount Received (TZS) <span class="text-danger">*</span></label>
+            <input type="number" name="amount" class="form-control" step="0.01"
+                   max="{{ customer.balance_owed }}" min="1" required
+                   placeholder="Enter amount paid by customer">
+            <div class="form-text">Maximum: {{ customer.balance_owed|floatformat:0 }} TZS</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Payment Method <span class="text-danger">*</span></label>
+            <select name="payment_method" class="form-select" required>
+              <option value="">-- Select --</option>
+              <option value="Cash">Cash</option>
+              <option value="Mobile Money">Mobile Money</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Notes (optional)</label>
+            <textarea name="notes" class="form-control" rows="2"
+                      placeholder="e.g. Paid by husband, partial payment agreed"></textarea>
+          </div>
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-success">
+              <i class="bi bi-check-circle me-1"></i> Record Repayment
+            </button>
+            <a href="{% url 'overdue_customers' %}" class="btn btn-outline-secondary">
+              Cancel
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <div class="alert alert-success">
+      <i class="bi bi-check-circle-fill me-2"></i>
+      This customer has no outstanding balance.
+    </div>
+    <a href="{% url 'overdue_customers' %}" class="btn btn-outline-secondary">
+      Back to Customers
+    </a>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,186 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+
+{% block content %}
+
+{% if not request.GET.export %}
+<!-- Filter Bar -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label fw-semibold">Year</label>
+        <select name="year" class="form-select">
+          {% for y in years %}
+            <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-semibold">Month (optional)</label>
+        <select name="month" class="form-select">
+          <option value="">All Months</option>
+          {% for num, name in months_map.items %}
+            <option value="{{ num }}" {% if selected_month == num|stringformat:"s" %}selected{% endif %}>
+              {{ name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <button type="submit" class="btn btn-primary w-100">
+          <i class="bi bi-funnel me-1"></i> Filter
+        </button>
+      </div>
+      <div class="col-md-3">
+        <a href="?year={{ year }}&month={{ selected_month }}&export=csv" class="btn btn-outline-success w-100">
+          <i class="bi bi-download me-1"></i> Export CSV
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="text-muted small mb-1">Total Revenue</div>
+        <div class="fs-5 fw-bold text-primary">{{ total_revenue|floatformat:0|intcomma }} TZS</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="text-muted small mb-1">Total Collected</div>
+        <div class="fs-5 fw-bold text-success">{{ total_collected|floatformat:0|intcomma }} TZS</div>
+        {% if total_outstanding > 0 %}
+          <div class="text-danger small">{{ total_outstanding|floatformat:0|intcomma }} TZS uncollected</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="text-muted small mb-1">Total Expenses</div>
+        <div class="fs-5 fw-bold text-danger">{{ total_expenses|floatformat:0|intcomma }} TZS</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="text-muted small mb-1">Gross Profit</div>
+        <div class="fs-5 fw-bold {% if total_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+          {{ total_profit|floatformat:0|intcomma }} TZS
+        </div>
+        <div class="text-muted small">{{ overall_margin }}% margin</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Monthly P&L Table -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white border-bottom fw-semibold">
+    Monthly Breakdown
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Month</th>
+            <th class="text-end">Revenue (TZS)</th>
+            <th class="text-end">Collected (TZS)</th>
+            <th class="text-end">Outstanding (TZS)</th>
+            <th class="text-end">Expenses (TZS)</th>
+            <th class="text-end">Gross Profit (TZS)</th>
+            <th class="text-end">Margin</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in pl_table %}
+          <tr>
+            <td class="fw-semibold">{{ row.month }}</td>
+            <td class="text-end">{{ row.revenue|floatformat:0|intcomma }}</td>
+            <td class="text-end text-success">{{ row.collected|floatformat:0|intcomma }}</td>
+            <td class="text-end {% if row.outstanding > 0 %}text-danger{% endif %}">
+              {{ row.outstanding|floatformat:0|intcomma }}
+            </td>
+            <td class="text-end text-danger">{{ row.expenses|floatformat:0|intcomma }}</td>
+            <td class="text-end fw-bold {% if row.gross_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {{ row.gross_profit|floatformat:0|intcomma }}
+            </td>
+            <td class="text-end">
+              <span class="badge {% if row.margin >= 20 %}bg-success{% elif row.margin >= 0 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                {{ row.margin }}%
+              </span>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="text-center text-muted py-4">No data for this period.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        {% if pl_table %}
+        <tfoot class="table-dark">
+          <tr>
+            <th>TOTAL</th>
+            <th class="text-end">{{ total_revenue|floatformat:0|intcomma }}</th>
+            <th class="text-end">{{ total_collected|floatformat:0|intcomma }}</th>
+            <th class="text-end">{{ total_outstanding|floatformat:0|intcomma }}</th>
+            <th class="text-end">{{ total_expenses|floatformat:0|intcomma }}</th>
+            <th class="text-end">{{ total_profit|floatformat:0|intcomma }}</th>
+            <th class="text-end">{{ overall_margin }}%</th>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Expense Category Breakdown -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white border-bottom fw-semibold">
+    Expenses by Category
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Category</th>
+          <th class="text-end">Total (TZS)</th>
+          <th>Share</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cat in category_breakdown %}
+        <tr>
+          <td>{{ cat.category|title|cut:"_" }}</td>
+          <td class="text-end">{{ cat.total|floatformat:0|intcomma }}</td>
+          <td style="width:35%">
+            {% if total_expenses > 0 %}
+            {% widthratio cat.total total_expenses 100 as pct %}
+            <div class="progress" style="height:8px">
+              <div class="progress-bar bg-danger" style="width:{{ pct }}%"></div>
+            </div>
+            <small class="text-muted">{{ pct }}%</small>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="text-center text-muted py-3">No expenses recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

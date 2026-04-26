@@ -1,0 +1,53 @@
+{% extends 'core/base.html' %}
+
+{% block page_title %}Record Production{% endblock %}
+{% block page_icon %}hammer{% endblock %}
+
+{% block content %}
+  <div class="card shadow-lg border-0">
+    <div class="card-header bg-primary text-white d-flex align-items-center">
+      <i class="bi bi-hammer me-2 fs-4"></i>
+      <h5 class="mb-0">Record Production</h5>
+    </div>
+    
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+
+        {% for field in form %}
+          <div class="mb-3">
+            <label for="{{ field.id_for_label }}" class="form-label fw-bold">
+              {{ field.label }}
+              {% if field.field.required %}
+                <span class="text-danger">*</span>
+              {% endif %}
+            </label>
+            
+            {{ field }}
+            
+            {% if field.help_text %}
+              <small class="form-text text-muted d-block mt-1">
+                {{ field.help_text }}
+              </small>
+            {% endif %}
+            
+            {% if field.errors %}
+              <div class="invalid-feedback d-block">
+                {{ field.errors }}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+
+        <div class="d-flex gap-3 mt-4">
+          <button type="submit" class="btn btn-success btn-lg">
+            <i class="bi bi-save me-1"></i> Record Production
+          </button>
+          <a href="{% url 'production_list' %}" class="btn btn-outline-secondary btn-lg">
+            <i class="bi bi-x-circle me-1"></i> Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends 'core/base.html' %}
+
+{% block page_title %}Log New Trip{% endblock %}
+{% block page_icon %}truck{% endblock %}
+
+{% block content %}
+  <div class="card shadow-lg border-0">
+    <div class="card-header bg-primary text-white d-flex align-items-center">
+      <i class="bi bi-truck me-2 fs-4"></i>
+      <h5 class="mb-0">Log New Trip</h5>
+    </div>
+
+    <div class="card-body">
+      <!-- Tip Alert -->
+      <div class="alert alert-info d-flex align-items-center mb-4">
+        <i class="bi bi-info-circle-fill me-3 fs-4"></i>
+        <div>
+          <strong>Tip:</strong> Enter start and end odometer readings from the truck dashboard. 
+          Distance and fuel efficiency will be calculated automatically.
+        </div>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+
+        {% for field in form %}
+          <div class="mb-3">
+            <label for="{{ field.id_for_label }}" class="form-label fw-bold">
+              {{ field.label }}
+              {% if field.field.required %}
+                <span class="text-danger">*</span>
+              {% endif %}
+            </label>
+            
+            {{ field }}
+            
+            {% if field.help_text %}
+              <small class="form-text text-muted d-block mt-1">
+                {{ field.help_text }}
+              </small>
+            {% endif %}
+            
+            {% if field.errors %}
+              <div class="invalid-feedback d-block">
+                {{ field.errors }}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+
+        <div class="d-flex gap-3 mt-4">
+          <button type="submit" class="btn btn-success btn-lg">
+            <i class="bi bi-save me-1"></i> Save Trip Log
+          </button>
+          <a href="{% url 'truck_profitability' %}" class="btn btn-outline-secondary btn-lg">
+            <i class="bi bi-x-circle me-1"></i> Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

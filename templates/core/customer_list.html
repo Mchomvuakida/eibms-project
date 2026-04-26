@@ -1,0 +1,65 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="mb-0">All Customers</h4>
+  <a href="{% url 'customer_create' %}" class="btn btn-primary">
+    <i class="bi bi-person-plus me-1"></i> Add Customer
+  </a>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Branch</th>
+          <th>Phone</th>
+          <th>Credit Limit</th>
+          <th>Balance Owed</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for customer in customers %}
+        <tr>
+          <td class="fw-semibold">{{ customer.name }}</td>
+          <td>{{ customer.branch.name }}</td>
+          <td>{{ customer.phone|default:"—" }}</td>
+          <td>{{ customer.credit_limit|floatformat:0 }} TZS</td>
+          <td>
+            {% if customer.balance_owed > 0 %}
+              <span class="text-danger fw-bold">{{ customer.balance_owed|floatformat:0 }} TZS</span>
+            {% else %}
+              <span class="text-success">Cleared</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if customer.is_active %}
+              <span class="badge bg-success">Active</span>
+            {% else %}
+              <span class="badge bg-secondary">Inactive</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if customer.balance_owed > 0 %}
+              <a href="{% url 'customer_repayment' customer.id %}"
+                 class="btn btn-sm btn-outline-success">
+                <i class="bi bi-cash-coin me-1"></i> Record Payment
+              </a>
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" class="text-center text-muted py-4">No customers found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

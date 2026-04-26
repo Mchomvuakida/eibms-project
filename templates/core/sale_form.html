@@ -1,0 +1,94 @@
+{% extends 'core/base.html' %}
+
+{% block page_title %}Record New Sale{% endblock %}
+{% block page_icon %}cart-plus{% endblock %}
+
+{% block content %}
+  <div class="card shadow-lg border-0">
+    <div class="card-header bg-primary text-white d-flex align-items-center">
+      <i class="bi bi-cart-plus me-2 fs-4"></i>
+      <h5 class="mb-0">Record New Sale</h5>
+    </div>
+
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+
+        <!-- Sale Details -->
+        <h5 class="mb-3 border-bottom pb-2 text-primary">
+          <i class="bi bi-info-circle me-2"></i>Sale Details
+        </h5>
+        {% for field in sale_form %}
+          <div class="mb-3">
+            <label for="{{ field.id_for_label }}" class="form-label fw-bold">
+              {{ field.label }}
+              {% if field.field.required %}
+                <span class="text-danger">*</span>
+              {% endif %}
+            </label>
+            {{ field }}
+            {% if field.help_text %}
+              <small class="form-text text-muted">{{ field.help_text }}</small>
+            {% endif %}
+            {% if field.errors %}
+              <div class="invalid-feedback d-block">
+                {{ field.errors }}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+
+        <!-- Items -->
+        <h5 class="mt-5 mb-3 border-bottom pb-2 text-primary">
+          <i class="bi bi-list-ul me-2"></i>Items Sold
+        </h5>
+
+        {{ item_formset.management_form }}
+
+        <div id="item_formset">
+          {% for form in item_formset %}
+            <div class="border p-3 mb-3 rounded bg-light item-form">
+              {{ form.as_p }}
+              {% if form.instance.pk %}
+                {{ form.DELETE }}
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+
+        <div class="d-flex gap-3 mt-4">
+          <button type="button" class="btn btn-outline-secondary" onclick="addItemForm()">
+            <i class="bi bi-plus-circle me-1"></i> Add Another Item
+          </button>
+          <button type="submit" class="btn btn-success btn-lg">
+            <i class="bi bi-save me-1"></i> Record Sale
+          </button>
+          <a href="{% url 'sale_list' %}" class="btn btn-outline-secondary btn-lg">
+            <i class="bi bi-x-circle me-1"></i> Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- JavaScript for adding new item forms -->
+  <script>
+    function addItemForm() {
+      const formset = document.getElementById('item_formset');
+      const totalForms = document.getElementById('id_items-TOTAL_FORMS');
+      const formCount = parseInt(totalForms.value);
+      
+      // Clone the first form (hidden template)
+      const templateForm = formset.children[0].cloneNode(true);
+      templateForm.innerHTML = templateForm.innerHTML.replace(/items-(\d+)/g, `items-${formCount}`);
+      
+      // Clear values in cloned form (optional)
+      templateForm.querySelectorAll('input, select, textarea').forEach(el => {
+        if (el.type !== 'hidden') el.value = '';
+      });
+      
+      formset.appendChild(templateForm);
+      totalForms.value = formCount + 1;
+    }
+  </script>
+{% endblock %}

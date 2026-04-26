@@ -1,0 +1,122 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+
+
+{% block page_title %}Sale #{{ sale.id }}{% endblock %}
+{% block page_icon %}receipt{% endblock %}
+
+{% block content %}
+
+<div class="card shadow-lg border-0 mb-5">
+  <div class="card-header bg-primary text-white d-flex align-items-center">
+    <i class="bi bi-receipt me-2 fs-4"></i>
+    <h5 class="mb-0">Sale #{{ sale.id }} – {{ sale.sale_date|date:"d M Y" }}</h5>
+  </div>
+
+  <div class="card-body">
+    <!-- Sale Information -->
+    <h5 class="mb-3 border-bottom pb-2">Sale Information</h5>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <p class="mb-1"><strong>Branch:</strong> {{ sale.branch.name }}</p>
+        <p class="mb-1"><strong>Customer:</strong> {% if sale.customer %}{{ sale.customer.name }}{% else %}Walk-in{% endif %}</p>
+        <p class="mb-1"><strong>Date:</strong> {{ sale.sale_date|date:"d M Y" }}</p>
+      </div>
+      <div class="col-md-6">
+        <p class="mb-1"><strong>Truck:</strong> {% if sale.truck %}{{ sale.truck.plate_number }}{% else %}-{% endif %}</p>
+        <p class="mb-1"><strong>Payment Status:</strong> 
+          <span class="badge bg-{% if sale.payment_status == 'paid' %}success{% elif sale.payment_status == 'partial' %}warning{% else %}danger{% endif %} px-3 py-2">
+            {{ sale.get_payment_status_display }}
+          </span>
+        </p>
+        <p class="mb-1"><strong>Payment Method:</strong> {{ sale.get_payment_method_display|default:"-" }}</p>
+      </div>
+    </div>
+
+    <!-- Totals -->
+    <div class="row g-3 mt-4">
+      <div class="col-md-4">
+        <div class="card bg-success text-white text-center shadow-sm">
+          <div class="card-body py-3">
+            <h6 class="mb-1">Total Amount</h6>
+            <h5 class="mb-0">{{ sale.total_amount|floatformat:0|intcomma }} TZS</h5>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card bg-info text-white text-center shadow-sm">
+          <div class="card-body py-3">
+            <h6 class="mb-1">Amount Paid</h6>
+            <h5 class="mb-0">{{ sale.amount_paid|floatformat:0|intcomma }} TZS</h5>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card bg-warning text-dark text-center shadow-sm">
+          <div class="card-body py-3">
+            <h6 class="mb-1">Balance Due</h6>
+            <h5 class="mb-0">{{ balance_due|floatformat:0|intcomma }} TZS</h5>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Items Sold -->
+<div class="card shadow-lg border-0">
+  <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">
+      <i class="bi bi-list-ul me-2"></i>
+      Items Sold
+    </h5>
+    <span class="badge bg-light text-dark">
+      {{ items.count }} item{{ items.count|pluralize }}
+    </span>
+  </div>
+
+  <div class="card-body p-0">
+    {% if items %}
+      <div class="table-responsive">
+        <table class="table table-hover table-striped mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Product</th>
+              <th class="text-center">Quantity</th>
+              <th class="text-end">Unit Price (TZS)</th>
+              <th class="text-end">Total (TZS)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr>
+                <td>{{ item.product.name }}</td>
+                <td class="text-center">{{ item.quantity|intcomma }}</td>
+                <td class="text-end">{{ item.unit_price|floatformat:0|intcomma }}</td>
+                <td class="text-end fw-bold">{{ item.total_price|floatformat:0|intcomma }}</td>
+              </tr>
+            {% endfor %}
+            <tr class="table-active fw-bold">
+              <td colspan="3" class="text-end">Grand Total</td>
+              <td class="text-end">{{ sale.total_amount|floatformat:0|intcomma }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-cart-x fs-1"></i>
+        <p class="mt-3">No items in this sale.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Actions -->
+<div class="d-flex justify-content-end mt-4">
+  <a href="{% url 'sale_list' %}" class="btn btn-outline-secondary btn-lg">
+    <i class="bi bi-arrow-left-circle me-2"></i> Back to Sales List
+  </a>
+</div>
+
+{% endblock %}

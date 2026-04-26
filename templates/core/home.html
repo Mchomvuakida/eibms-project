@@ -1,0 +1,22 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Welcome to EIBMS Dashboard</h1>
+
+<div class="card">
+  <div class="card-body">
+    <h5 class="card-title">Your Account</h5>
+    <p><strong>Username:</strong> {{ user.username }}</p>
+    <p><strong>Role:</strong> {{ user.role|title }}</p>
+    {% if user.branch %}
+      <p><strong>Branch:</strong> {{ user.branch.name }}</p>
+    {% else %}
+      <p><strong>Branch:</strong> All Branches (Admin/Owner)</p>
+    {% endif %}
+  </div>
+</div>
+
+<p class="mt-4">This is your starting dashboard. Next we add real stats and branch filtering.</p>
+{% endblock %}

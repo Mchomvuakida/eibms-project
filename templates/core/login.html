@@ -1,0 +1,57 @@
+{% extends 'core/base_auth.html' %}
+
+{% block page_title %}Login{% endblock %}
+{% block page_icon %}box-arrow-in-right{% endblock %}
+
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+      <div class="card shadow-lg border-0 mt-5">
+        <div class="card-header bg-primary text-white text-center py-4">
+          <i class="bi bi-building-fill-gear fs-1 mb-2"></i>
+          <h4 class="mb-0">ES & RI EIBMS</h4>
+          <small>Integrated Business Management System</small>
+        </div>
+
+        <div class="card-body p-4">
+          <h5 class="text-center mb-4 text-muted">Sign in to your account</h5>
+
+          <form method="post">
+            {% csrf_token %}
+
+            {% for field in form %}
+              <div class="mb-3">
+                <label for="{{ field.id_for_label }}" class="form-label fw-bold">
+                  {{ field.label }}
+                  {% if field.field.required %}
+                    <span class="text-danger">*</span>
+                  {% endif %}
+                </label>
+                
+                {{ field }}
+                
+                {% if field.help_text %}
+                  <small class="form-text text-muted">{{ field.help_text }}</small>
+                {% endif %}
+                
+                {% if field.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ field.errors }}
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+
+            <button type="submit" class="btn btn-primary btn-lg w-100 mt-3">
+              <i class="bi bi-box-arrow-in-right me-2"></i> Login
+            </button>
+          </form>
+
+          <div class="text-center mt-4 small text-muted">
+            <p>Forgot password? Contact system administrator.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

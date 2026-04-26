@@ -1,0 +1,120 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+
+
+{% block page_title %}TRA Expense Report{% endblock %}
+{% block page_icon %}file-earmark-spreadsheet{% endblock %}
+
+{% block content %}
+
+<div class="card shadow-lg border-0 mb-5">
+  <div class="card-header bg-primary text-white d-flex align-items-center">
+    <i class="bi bi-file-earmark-spreadsheet me-2 fs-4"></i>
+    <h5 class="mb-0">TRA Expense Report – {{ year }}</h5>
+  </div>
+
+  <div class="card-body">
+    {% if branch %}
+      <p class="lead mb-4">
+        <i class="bi bi-building me-2"></i>
+        Branch: <strong>{{ branch.name }}</strong>
+      </p>
+    {% endif %}
+
+    <!-- Annual Total -->
+    <div class="row g-3 mb-5">
+      <div class="col-12">
+        <div class="card bg-primary text-white text-center shadow-sm h-100">
+          <div class="card-body py-4">
+            <h6 class="mb-1">Annual Total Expenses</h6>
+            <h4 class="mb-0">{{ grand_total|floatformat:0|intcomma }} TZS</h4>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Expenses by Category -->
+    <h5 class="mb-3 border-bottom pb-2 text-primary">
+      <i class="bi bi-tags me-2"></i>
+      Expenses by Category
+    </h5>
+
+    {% if category_totals %}
+      <div class="table-responsive mb-5">
+        <table class="table table-hover table-striped">
+          <thead class="table-dark">
+            <tr>
+              <th>Category</th>
+              <th class="text-end">Total (TZS)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cat in category_totals %}
+              <tr>
+                <td title="{{ cat.category|title }} – allowable deduction under Income Tax Act">
+                  {{ cat.category|title }}
+                </td>
+                <td class="text-end">{{ cat.total|floatformat:0|intcomma }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-journal-x fs-1"></i>
+        <p class="mt-3">No expenses recorded in {{ year }}.</p>
+      </div>
+    {% endif %}
+
+    <!-- Monthly Breakdown -->
+    <h5 class="mb-3 border-bottom pb-2 text-primary">
+      <i class="bi bi-calendar-month me-2"></i>
+      Monthly Breakdown
+    </h5>
+
+    {% if monthly_breakdown %}
+      <div class="table-responsive">
+        <table class="table table-hover table-striped">
+          <thead class="table-dark">
+            <tr>
+              <th>Month</th>
+              <th class="text-end">Total Expenses (TZS)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in monthly_breakdown %}
+              <tr>
+                <td>{{ m.month|date:"F Y" }}</td>
+                <td class="text-end">{{ m.total|floatformat:0|intcomma }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-calendar-x fs-1"></i>
+        <p class="mt-3">No monthly data for {{ year }}.</p>
+      </div>
+    {% endif %}
+
+    <!-- Actions -->
+    <div class="d-flex flex-wrap gap-3 mt-5 justify-content-center">
+      <a href="?year={{ year|add:"-1" }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Previous Year
+      </a>
+      <a href="?year={{ year|add:"1" }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-right me-1"></i> Next Year
+      </a>
+      <a href="#" class="btn btn-outline-primary" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i> Print
+      </a>
+      <a href="?year={{ year }}&export=csv" class="btn btn-outline-success">
+        <i class="bi bi-filetype-csv me-1"></i> Export CSV
+      </a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
