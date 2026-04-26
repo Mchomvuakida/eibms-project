@@ -1,0 +1,77 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-bottom fw-semibold">
+        <i class="bi bi-person-plus me-2"></i>Create New User Account
+      </div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Username <span class="text-danger">*</span></label>
+              <input type="text" name="username" class="form-control" required
+                     placeholder="e.g. same_clerk1">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Role <span class="text-danger">*</span></label>
+              <select name="role" class="form-select" required>
+                <option value="">-- Select Role --</option>
+                {% for role in roles %}
+                  <option value="{{ role }}">{{ role|title }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">First Name</label>
+              <input type="text" name="first_name" class="form-control" placeholder="First name">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Last Name</label>
+              <input type="text" name="last_name" class="form-control" placeholder="Last name">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Branch</label>
+              <select name="branch" class="form-select">
+                <option value="">-- No specific branch --</option>
+                {% for branch in branches %}
+                  <option value="{{ branch.id }}">{{ branch.name }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Leave blank for admin/owner who see all branches.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone Number</label>
+              <input type="text" name="phone_number" class="form-control"
+                     placeholder="e.g. 0712345678">
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Email</label>
+              <input type="email" name="email" class="form-control"
+                     placeholder="optional">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Password <span class="text-danger">*</span></label>
+              <input type="password" name="password" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Confirm Password <span class="text-danger">*</span></label>
+              <input type="password" name="password2" class="form-control" required>
+            </div>
+          </div>
+
+          <div class="d-grid gap-2 mt-4">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-check-circle me-1"></i> Create Account
+            </button>
+            <a href="{% url 'user_list' %}" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

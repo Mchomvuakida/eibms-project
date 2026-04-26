@@ -20,7 +20,7 @@ from rest_framework.response import Response
 
 from .models import (
     Expense, Branch, Production, Product, Sale,
-    Customer, Truck, TripLog, InventoryLog
+    Customer, Truck, TripLog, InventoryLog,User
 )
 from .forms import (
     ExpenseForm, ProductionForm, SaleForm,
@@ -954,4 +954,115 @@ def api_stock_status(request):
         'total_products': len(stock_data),
         'low_stock_count': sum(1 for p in stock_data if p['is_low']),
         'products': stock_data,
+    })
+
+@role_required('admin', 'owner')
+def user_list(request):
+    users = User.objects.all().order_by('role', 'username')
+    return render(request, 'core/user_list.html', {
+        'title': 'User Management',
+        'users': users,
+    })
+
+
+@role_required('admin', 'owner')
+def user_create(request):
+    branches = Branch.objects.filter(status='active')
+
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        role = request.POST.get('role', '').strip()
+        branch_id = request.POST.get('branch', '').strip()
+        phone = request.POST.get('phone_number', '').strip()
+        password = request.POST.get('password', '').strip()
+        password2 = request.POST.get('password2', '').strip()
+
+        errors = []
+        if not username:
+            errors.append('Username is required.')
+        if not role:
+            errors.append('Role is required.')
+        if not password:
+            errors.append('Password is required.')
+        if password != password2:
+            errors.append('Passwords do not match.')
+        if User.objects.filter(username=username).exists():
+            errors.append(f'Username "{username}" is already taken.')
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            try:
+                branch = Branch.objects.get(id=branch_id) if branch_id else None
+                user = User.objects.create_user(
+                    username=username,
+                    password=password,
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=email,
+                    role=role,
+                    branch=branch,
+                    phone_number=phone,
+                )
+                messages.success(request, f'Account created for {username} ({role}).')
+                return redirect('user_list')
+            except Exception as e:
+                messages.error(request, str(e))
+
+    return render(request, 'core/user_create.html', {
+        'title': 'Create User Account',
+        'branches': branches,
+        'roles': ['owner', 'branch_manager', 'clerk', 'viewer'],
+    })
+
+
+@role_required('admin', 'owner')
+def user_edit(request, user_id):
+    target_user = get_object_or_404(User, id=user_id)
+    branches = Branch.objects.filter(status='active')
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'update':
+            target_user.first_name = request.POST.get('first_name', '').strip()
+            target_user.last_name = request.POST.get('last_name', '').strip()
+            target_user.email = request.POST.get('email', '').strip()
+            target_user.role = request.POST.get('role', target_user.role)
+            target_user.phone_number = request.POST.get('phone_number', '').strip()
+            branch_id = request.POST.get('branch', '')
+            target_user.branch = Branch.objects.get(id=branch_id) if branch_id else None
+            target_user.save()
+            messages.success(request, f'{target_user.username} updated successfully.')
+            return redirect('user_list')
+
+        elif action == 'reset_password':
+            new_password = request.POST.get('new_password', '').strip()
+            confirm_password = request.POST.get('confirm_password', '').strip()
+            if not new_password:
+                messages.error(request, 'New password cannot be empty.')
+            elif new_password != confirm_password:
+                messages.error(request, 'Passwords do not match.')
+            else:
+                target_user.set_password(new_password)
+                target_user.save()
+                messages.success(request, f'Password reset for {target_user.username}.')
+                return redirect('user_list')
+
+        elif action == 'toggle_active':
+            target_user.is_active = not target_user.is_active
+            target_user.save()
+            status = 'activated' if target_user.is_active else 'deactivated'
+            messages.success(request, f'{target_user.username} {status}.')
+            return redirect('user_list')
+
+    return render(request, 'core/user_edit.html', {
+        'title': f'Edit User — {target_user.username}',
+        'target_user': target_user,
+        'branches': branches,
+        'roles': ['owner', 'branch_manager', 'clerk', 'viewer'],
     })

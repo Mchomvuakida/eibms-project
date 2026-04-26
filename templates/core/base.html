@@ -222,6 +222,14 @@
   {% if user.role == 'admin' or user.role == 'owner' %}
   <div class="sidebar-section">Admin</div>
   <nav class="nav flex-column">
+    <a class="nav-link {% if request.resolver_match.url_name == 'user_list' %}active{% endif %}"
+       href="{% url 'user_list' %}">
+      <i class="bi bi-people"></i> User Management
+    </a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'user_create' %}active{% endif %}"
+       href="{% url 'user_create' %}">
+      <i class="bi bi-person-plus"></i> Add User
+    </a>
     <a class="nav-link" href="/admin/">
       <i class="bi bi-shield-lock"></i> Admin Panel
     </a>

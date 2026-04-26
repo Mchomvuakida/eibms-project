@@ -1,0 +1,127 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+
+    <!-- Edit Details -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white border-bottom fw-semibold">
+        <i class="bi bi-pencil me-2"></i>Edit — {{ target_user.username }}
+      </div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="update">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">First Name</label>
+              <input type="text" name="first_name" class="form-control"
+                     value="{{ target_user.first_name }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Last Name</label>
+              <input type="text" name="last_name" class="form-control"
+                     value="{{ target_user.last_name }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Role</label>
+              <select name="role" class="form-select">
+                {% for role in roles %}
+                  <option value="{{ role }}"
+                    {% if target_user.role == role %}selected{% endif %}>
+                    {{ role|title }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Branch</label>
+              <select name="branch" class="form-select">
+                <option value="">-- No specific branch --</option>
+                {% for branch in branches %}
+                  <option value="{{ branch.id }}"
+                    {% if target_user.branch.id == branch.id %}selected{% endif %}>
+                    {{ branch.name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone Number</label>
+              <input type="text" name="phone_number" class="form-control"
+                     value="{{ target_user.phone_number }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Email</label>
+              <input type="email" name="email" class="form-control"
+                     value="{{ target_user.email }}">
+            </div>
+          </div>
+          <div class="mt-4 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-check-circle me-1"></i> Save Changes
+            </button>
+            <a href="{% url 'user_list' %}" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Reset Password -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white border-bottom fw-semibold">
+        <i class="bi bi-key me-2"></i>Reset Password
+      </div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="reset_password">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">New Password</label>
+              <input type="password" name="new_password" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Confirm Password</label>
+              <input type="password" name="confirm_password" class="form-control" required>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-warning mt-3">
+            <i class="bi bi-key me-1"></i> Reset Password
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Activate / Deactivate -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-bottom fw-semibold">
+        <i class="bi bi-toggle-on me-2"></i>Account Status
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Current status:
+          <strong class="{% if target_user.is_active %}text-success{% else %}text-danger{% endif %}">
+            {% if target_user.is_active %}Active{% else %}Inactive{% endif %}
+          </strong>
+          — Deactivating an account prevents the user from logging in without deleting their data.
+        </p>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="toggle_active">
+          <button type="submit"
+            class="btn {% if target_user.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+            {% if target_user.is_active %}
+              <i class="bi bi-person-x me-1"></i> Deactivate Account
+            {% else %}
+              <i class="bi bi-person-check me-1"></i> Activate Account
+            {% endif %}
+          </button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
