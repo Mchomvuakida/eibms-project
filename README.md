@@ -38,7 +38,7 @@ EIBMS replaces manual paper records with a centralized digital system covering:
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/eibms-project.git
+git clone https://github.com/Mchomvuakida/eibms-project.git
 cd eibms-project
 ```
 

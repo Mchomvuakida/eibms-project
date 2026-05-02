@@ -2,6 +2,8 @@
 from django import forms
 from .models import Expense, Branch, Production, Product, Customer, Sale, SaleItem, TripLog
 from django.forms import formset_factory
+from django.contrib.auth.password_validation import validate_password
+from .models import User, Branch
 
 class SaleItemForm(forms.ModelForm):
     class Meta:
@@ -132,3 +134,90 @@ class StockPurchaseForm(forms.Form):
                 self.fields['product'].queryset = Product.objects.all()
             elif user.branch:
                 self.fields['product'].queryset = Product.objects.filter(branch=user.branch)
+
+class UserCreateForm(forms.Form):
+    username = forms.CharField(
+        max_length=150,
+        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        label='Username'
+    )
+    first_name = forms.CharField(
+        max_length=150,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        label='First Name'
+    )
+    last_name = forms.CharField(
+        max_length=150,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        label='Last Name'
+    )
+    email = forms.EmailField(
+        required=False,
+        widget=forms.EmailInput(attrs={'class': 'form-control'}),
+        label='Email'
+    )
+    role = forms.ChoiceField(
+        choices=[
+            ('owner', 'Business Owner'),
+            ('branch_manager', 'Branch Manager'),
+            ('clerk', 'Sales Clerk'),
+            ('viewer', 'Read Only'),
+        ],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Role'
+    )
+    branch = forms.ModelChoiceField(
+        queryset=Branch.objects.filter(status='active'),
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Branch'
+    )
+    phone_number = forms.CharField(
+        max_length=15,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        label='Phone Number'
+    )
+    password = forms.CharField(
+        widget=forms.PasswordInput(attrs={'class': 'form-control'}),
+        label='Password'
+    )
+    password2 = forms.CharField(
+        widget=forms.PasswordInput(attrs={'class': 'form-control'}),
+        label='Confirm Password'
+    )
+
+    def clean_username(self):
+        username = self.cleaned_data.get('username')
+        if User.objects.filter(username=username).exists():
+            raise forms.ValidationError(f'Username "{username}" is already taken.')
+        return username
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password = cleaned_data.get('password')
+        password2 = cleaned_data.get('password2')
+        if password and password2 and password != password2:
+            raise forms.ValidationError('Passwords do not match.')
+        return cleaned_data
+
+
+class UserEditForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'email', 'role', 'branch', 'phone_number', 'is_active']
+        widgets = {
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'role': forms.Select(attrs={'class': 'form-select'}),
+            'branch': forms.Select(attrs={'class': 'form-select'}),
+            'phone_number': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['branch'].queryset = Branch.objects.filter(status='active')
+        self.fields['branch'].required = False

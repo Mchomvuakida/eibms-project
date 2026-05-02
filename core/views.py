@@ -221,6 +221,7 @@ def sale_create(request):
                         sale.branch = request.user.branch
 
                     sale.total_amount = Decimal('0')
+                    sale.created_by = request.user
                     sale.save()
 
                     for item_form in item_formset:
@@ -250,11 +251,13 @@ def sale_create(request):
                                 created_by=request.user,
                             )
 
-                    if sale.payment_status in ['credit', 'partial'] and sale.customer:
-                        sale.customer.balance_owed += (sale.total_amount - sale.amount_paid)
-                        sale.customer.save()
-
+                    sale.created_by = request.user
                     sale.save()
+
+                    balance_due = sale.total_amount - sale.amount_paid
+                    if balance_due > 0 and sale.customer:
+                        sale.customer.balance_owed += balance_due
+                        sale.customer.save()
                     messages.success(request, 'Sale recorded successfully!')
                     return redirect('sale_list')
 
@@ -398,8 +401,24 @@ def customer_repayment(request, customer_id):
             if amount > customer.balance_owed:
                 raise ValueError(f'Amount exceeds balance owed ({customer.balance_owed} TZS).')
             with transaction.atomic():
+                # Apply repayment to oldest unpaid sales first
+                remaining = amount
+                unpaid_sales = customer.sales.filter(
+                    payment_status__in=['credit', 'partial']
+                ).order_by('sale_date')
+
+                for sale in unpaid_sales:
+                    if remaining <= 0:
+                        break
+                    outstanding = sale.total_amount - sale.amount_paid
+                    payment = min(remaining, outstanding)
+                    sale.amount_paid += payment
+                    sale.save()  # triggers payment_status update via Sale.save()
+                    remaining -= payment
+
                 customer.balance_owed -= amount
                 customer.save()
+
                 messages.success(
                     request,
                     f'Repayment of {amount:,.0f} TZS recorded for {customer.name}. '
@@ -456,6 +475,7 @@ def stock_purchase(request):
                             amount=cost_per_unit * quantity,
                             description=f'Purchase: {quantity} {product.unit} of {product.name} from {supplier}. {notes}',
                             date=date,
+                            created_by=request.user,
                         )
 
                     messages.success(request, f'Stock updated! {quantity} {product.unit} of {product.name} added.')
@@ -530,6 +550,10 @@ def production_create(request):
                     Product.objects.filter(id=production.product.id).update(
                         current_stock=F('current_stock') + production.quantity
                     )
+                    production.raw_materials_consumed = {
+                        str(rid): float(qty_per_unit * production.quantity)
+                        for rid, qty_per_unit in recipe.items()
+                    }
                     production.save()
                     InventoryLog.objects.create(
                         product=finished,
@@ -599,7 +623,8 @@ def expense_create(request):
     if request.user.role not in ['admin', 'owner'] and request.user.branch:
         form.fields['branch'].queryset = Branch.objects.filter(id=request.user.branch.id)
         form.fields['branch'].initial = request.user.branch
-        form.fields['branch'].widget.attrs['disabled'] = True
+        form.fields['branch'].widget.attrs['readonly'] = True
+        form.fields['branch'].required = False
 
     return render(request, 'core/expense_form.html', {
         'form': form,
@@ -681,6 +706,9 @@ def trip_create(request):
         form = TripLogForm(request.POST)
         if form.is_valid():
             trip = form.save()
+            if trip.end_odometer:
+                trip.truck.current_odometer = trip.end_odometer
+                trip.truck.save()
             messages.success(request, 'Trip logged successfully!')
             return redirect('truck_profit_detail', truck_id=trip.truck.id)
     else:
