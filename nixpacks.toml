@@ -1,3 +1,7 @@
+[variables]
+SECRET_KEY = "dummy-secret-key-for-build-only"
+DEBUG = "False"
+
 [phases.setup]
 nixPkgs = ["python311", "python311Packages.pip"]
 
