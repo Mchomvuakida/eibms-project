@@ -2,10 +2,14 @@
 nixPkgs = ["python311", "python311Packages.pip"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+cmds = [
+  "python3.11 -m venv /app/venv",
+  "/app/venv/bin/pip install --upgrade pip",
+  "/app/venv/bin/pip install -r requirements.txt"
+]
 
 [phases.build]
-cmds = ["python manage.py collectstatic --noinput"]
+cmds = ["/app/venv/bin/python manage.py collectstatic --noinput"]
 
 [start]
-cmd = "gunicorn eibms.wsgi"
+cmd = "/app/venv/bin/gunicorn eibms.wsgi"
