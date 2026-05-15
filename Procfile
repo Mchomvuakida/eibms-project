@@ -1,1 +1,0 @@
-web: /app/venv/bin/gunicorn eibms.wsgi --bind 0.0.0.0:$PORT
