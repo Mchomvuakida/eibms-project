@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "gunicorn eibms.wsgi",
+    "startCommand": "/app/venv/bin/gunicorn eibms.wsgi --bind 0.0.0.0:$PORT",
     "healthcheckPath": "/",
     "restartPolicyType": "ON_FAILURE"
   }
