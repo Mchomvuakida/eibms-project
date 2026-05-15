@@ -28,10 +28,16 @@ EIBMS replaces manual paper records with a centralized digital system covering:
 | Data Analysis | Pandas |
 | Frontend | HTML5, Bootstrap 5, Chart.js |
 | API | Django REST Framework + JWT |
-| Deployment | Railway |
+| Deployment | Render |
 | Version Control | Git & GitHub |
 
 ---
+
+## Live Demo
+https://eibms.onrender.com
+
+## Deployment
+The application is deployed on Render (render.com) with a PostgreSQL database hosted on Neon (neon.tech).
 
 ## Getting Started
 
