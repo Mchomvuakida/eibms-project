@@ -8,7 +8,7 @@ from core import views as core_views
 from django.shortcuts import redirect
 
 urlpatterns = [
-    path('', lambda request: redirect('dashboard'), name='home'),
+    path('', lambda request: redirect('/dashboard/'), name='home'),
     path('admin/', admin.site.urls),
     path('', include('core.urls')),
 
