@@ -5,9 +5,10 @@ from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from core import views as core_views
+from django.shortcuts import redirect
 
 urlpatterns = [
-    path('', lambda request: HttpResponse('OK'), name='health'),
+    path('', lambda request: redirect('dashboard'), name='home'),
     path('admin/', admin.site.urls),
     path('', include('core.urls')),
 
