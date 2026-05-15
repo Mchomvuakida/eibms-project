@@ -2,7 +2,7 @@ services:
   - type: web
     name: eibms
     runtime: python
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    buildCommand: pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --noinput
     startCommand: gunicorn eibms.wsgi
     envVars:
       - key: DEBUG
