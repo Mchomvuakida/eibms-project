@@ -16,11 +16,16 @@ class SaleItemForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
-        if user and user.role not in ['admin', 'owner'] and user.branch:
+        if user and user.role in ['admin', 'owner']:
+            self.fields['product'].queryset = Product.objects.filter(
+                is_raw_material=False,
+                current_stock__gt=0
+            )
+        elif user and user.branch:
             self.fields['product'].queryset = Product.objects.filter(
                 branch=user.branch,
                 is_raw_material=False,
-                current_stock__gt=0  # only sell available stock
+                current_stock__gt=0
             )
 
 
@@ -40,6 +45,9 @@ class SaleForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if user and user.role not in ['admin', 'owner'] and user.branch:
             self.fields['customer'].queryset = Customer.objects.filter(branch=user.branch)
+            self.fields['branch'].widget = forms.HiddenInput()
+            self.fields['branch'].required = False
+            self.fields['branch'].initial = user.branch
 
 class ExpenseForm(forms.ModelForm):
     class Meta:

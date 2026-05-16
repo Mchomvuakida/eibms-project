@@ -8,6 +8,7 @@ from django.db import transaction
 from django.http import HttpResponse
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils import timezone
+from django import forms
 from datetime import timedelta, datetime, date
 from decimal import Decimal
 from functools import wraps
@@ -204,7 +205,7 @@ def main_dashboard(request):
 def sale_create(request):
     if request.method == 'POST':
         sale_form = SaleForm(request.POST, user=request.user)
-        item_formset = SaleItemFormSet(request.POST, prefix='items')
+        item_formset = SaleItemFormSet(request.POST, prefix='items', form_kwargs={'user': request.user})
 
         if sale_form.is_valid() and item_formset.is_valid():
             try:
@@ -265,11 +266,13 @@ def sale_create(request):
                 messages.error(request, str(e))
     else:
         sale_form = SaleForm(user=request.user)
-        item_formset = SaleItemFormSet(prefix='items')
+        item_formset = SaleItemFormSet(prefix='items', form_kwargs={'user': request.user})
 
     if request.user.role not in ['admin', 'owner'] and request.user.branch:
         sale_form.fields['customer'].queryset = Customer.objects.filter(
             branch=request.user.branch)
+        sale_form.fields['branch'].widget = forms.HiddenInput()
+        sale_form.fields['branch'].initial = request.user.branch
 
     return render(request, 'core/sale_form.html', {
         'sale_form': sale_form,
