@@ -20,7 +20,7 @@ from rest_framework.response import Response
 
 from .models import (
     Expense, Branch, Production, Product, Sale,
-    Customer, Truck, TripLog, InventoryLog,User, StockPurchase
+    Customer, Truck, TripLog, InventoryLog,User
 )
 from .forms import (
     ExpenseForm, ProductionForm, SaleForm,
@@ -1143,10 +1143,13 @@ def cash_flow_report(request):
     # Expenses (cash out)
     total_expenses = Expense.objects.filter(expense_filter).aggregate(t=Sum('amount'))['t'] or 0
 
-    # Stock purchases (cash locked in stock)
-    stock_purchases = StockPurchase.objects.filter(purchase_filter).aggregate(
-        t=Sum(F('quantity') * F('cost_per_unit'))
-    )['t'] or 0
+    # Stock purchases (cash locked in stock) — tracked via inventory logs
+    stock_purchases = InventoryLog.objects.filter(
+        movement_type='purchase',
+        created_at__month=month,
+        created_at__year=year
+    ).aggregate(t=Sum('quantity'))['t'] or 0
+    stock_purchases = abs(stock_purchases or 0)
 
     # Net cash position
     net_cash = actual_cash_in - total_expenses - stock_purchases
