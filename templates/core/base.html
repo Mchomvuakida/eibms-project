@@ -162,6 +162,10 @@
        href="{% url 'sale_create' %}">
       <i class="bi bi-cart-plus"></i> New Sale
     </a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'cash_flow_report' %}active{% endif %}"
+       href="{% url 'cash_flow_report' %}">
+      <i class="bi bi-cash-stack"></i> Cash Flow
+    </a>
     <a class="nav-link {% if request.resolver_match.url_name == 'overdue_customers' %}active{% endif %}"
        href="{% url 'overdue_customers' %}">
       <i class="bi bi-people-fill"></i> Overdue Customers

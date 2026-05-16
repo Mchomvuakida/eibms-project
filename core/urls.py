@@ -21,6 +21,7 @@ urlpatterns = [
     path('trips/add/', views.trip_create, name='trip_create'),
     path('reports/tra-expenses/', views.tra_expense_report, name='tra_expense_report'),
     path('reports/sales/', views.sales_report, name='sales_report'),
+    path('reports/cash-flow/', views.cash_flow_report, name='cash_flow_report'),
     path('customers/overdue/', views.overdue_customers, name='overdue_customers'),
     path('reports/profit-loss/', views.profit_and_loss, name='profit_and_loss'),
     path('stock/purchase/', views.stock_purchase, name='stock_purchase'),

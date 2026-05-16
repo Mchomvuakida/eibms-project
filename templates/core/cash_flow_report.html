@@ -1,0 +1,170 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+
+{% block content %}
+
+<div class="row mb-4">
+  <div class="col-12">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label small text-muted">Month</label>
+        <select name="month" class="form-select form-select-sm">
+          {% for num, name in months %}
+            <option value="{{ num }}" {% if num == selected_month %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label small text-muted">Year</label>
+        <select name="year" class="form-select form-select-sm">
+          {% for y in years %}
+            <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if user.role in 'admin owner' %}
+      <div class="col-auto">
+        <label class="form-label small text-muted">Branch</label>
+        <select name="branch" class="form-select form-select-sm">
+          <option value="">All Branches</option>
+          {% for b in branches %}
+            <option value="{{ b.id }}" {% if selected_branch == b.id|stringformat:'s' %}selected{% endif %}>{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-dark">Filter</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card border-0 bg-light h-100">
+      <div class="card-body text-center">
+        <div class="small text-muted mb-1">Total Sales (invoiced)</div>
+        <div class="fs-4 fw-500 text-dark">TZS {{ total_sales|intcomma }}</div>
+        <div class="small text-muted mt-1">what you sold this month</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 h-100" style="background:#EAF3DE;">
+      <div class="card-body text-center">
+        <div class="small mb-1" style="color:#3B6D11;">Cash Actually Received</div>
+        <div class="fs-4 fw-500" style="color:#3B6D11;">TZS {{ actual_cash_in|intcomma }}</div>
+        <div class="small mt-1" style="color:#3B6D11;">cash sales + partial payments</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 h-100" style="background:#FAEEDA;">
+      <div class="card-body text-center">
+        <div class="small mb-1" style="color:#854F0B;">Uncollected (Credit)</div>
+        <div class="fs-4 fw-500" style="color:#854F0B;">TZS {{ uncollected|intcomma }}</div>
+        <div class="small mt-1" style="color:#854F0B;">sold but not yet paid to you</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card border-0 h-100" style="background:#FCEBEB;">
+      <div class="card-body text-center">
+        <div class="small mb-1" style="color:#A32D2D;">Cash Paid Out (Expenses)</div>
+        <div class="fs-4 fw-500" style="color:#A32D2D;">TZS {{ total_expenses|intcomma }}</div>
+        <div class="small mt-1" style="color:#A32D2D;">all expenses paid this month</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 h-100" style="background:#FCEBEB;">
+      <div class="card-body text-center">
+        <div class="small mb-1" style="color:#A32D2D;">Cash Locked in Stock</div>
+        <div class="fs-4 fw-500" style="color:#A32D2D;">TZS {{ stock_purchases|intcomma }}</div>
+        <div class="small mt-1" style="color:#A32D2D;">stock purchased, not yet sold</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 h-100" style="background: {% if net_cash < 0 %}#FCEBEB{% else %}#f8f9fa{% endif %};">
+      <div class="card-body text-center">
+        <div class="small mb-1 {% if net_cash >= 0 %}text-muted{% else %}text-danger{% endif %}">Net Cash Position</div>
+        <div class="fs-4 fw-500 {% if net_cash >= 0 %}text-success{% else %}text-danger{% endif %}">TZS {{ net_cash|intcomma }}</div>
+        <div class="small mt-1 text-muted">cash in - expenses - stock bought</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Explanation Box -->
+<div class="alert alert-info mb-4" style="font-size:13px;">
+  <strong>Why your profit looks different from your cash:</strong><br>
+  Profit = Total Sales - Total Expenses (includes credit sales you haven't collected yet).<br>
+  Cash in hand = Only what customers actually paid you in cash, minus what you spent.
+  If you have a lot of <strong>credit sales</strong> or bought a lot of <strong>stock</strong>, your profit will be high but cash will be low.
+</div>
+
+<!-- Trend Chart -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <h6 class="text-muted small text-uppercase mb-3">6-Month Cash Trend</h6>
+    <canvas id="trendChart" style="max-height:250px;"></canvas>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const trend = {{ trend_json|safe }};
+new Chart(document.getElementById('trendChart'), {
+  type: 'line',
+  data: {
+    labels: trend.map(t => t.month),
+    datasets: [
+      {
+        label: 'Cash In',
+        data: trend.map(t => t.cash_in),
+        borderColor: '#3B6D11',
+        backgroundColor: 'rgba(59,109,17,0.08)',
+        fill: true,
+        tension: 0.3,
+      },
+      {
+        label: 'Cash Out',
+        data: trend.map(t => t.cash_out),
+        borderColor: '#A32D2D',
+        backgroundColor: 'rgba(163,45,45,0.08)',
+        fill: true,
+        tension: 0.3,
+      },
+      {
+        label: 'Net',
+        data: trend.map(t => t.net),
+        borderColor: '#185FA5',
+        borderDash: [5,5],
+        fill: false,
+        tension: 0.3,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom' } },
+    scales: {
+      y: {
+        ticks: {
+          callback: v => (v/1000000).toFixed(1) + 'M'
+        }
+      }
+    }
+  }
+});
+</script>
+{% endblock %}

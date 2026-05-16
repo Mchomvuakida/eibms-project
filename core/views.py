@@ -8,7 +8,7 @@ from django.db import transaction
 from django.http import HttpResponse
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, datetime, date
 from decimal import Decimal
 from functools import wraps
 import csv
@@ -20,7 +20,7 @@ from rest_framework.response import Response
 
 from .models import (
     Expense, Branch, Production, Product, Sale,
-    Customer, Truck, TripLog, InventoryLog,User
+    Customer, Truck, TripLog, InventoryLog,User, StockPurchase
 )
 from .forms import (
     ExpenseForm, ProductionForm, SaleForm,
@@ -1093,4 +1093,103 @@ def user_edit(request, user_id):
         'target_user': target_user,
         'branches': branches,
         'roles': ['owner', 'branch_manager', 'clerk', 'viewer'],
+    })
+
+@login_required
+@role_required('admin', 'owner', 'branch_manager')
+def cash_flow_report(request):
+    from django.db.models import Sum, Q
+    import json
+
+    branch = request.GET.get('branch')
+    month = request.GET.get('month', str(datetime.today().month))
+    year = request.GET.get('year', str(datetime.today().year))
+
+    try:
+        month = int(month)
+        year = int(year)
+    except ValueError:
+        month = datetime.today().month
+        year = datetime.today().year
+
+    # Base filters
+    sale_filter = Q(sale_date__month=month, sale_date__year=year)
+    expense_filter = Q(date__month=month, date__year=year)
+    purchase_filter = Q(purchase_date__month=month, purchase_date__year=year)
+
+    if request.user.role == 'branch_manager' and request.user.branch:
+        sale_filter &= Q(branch=request.user.branch)
+        expense_filter &= Q(branch=request.user.branch)
+        purchase_filter &= Q(branch=request.user.branch)
+    elif branch:
+        sale_filter &= Q(branch_id=branch)
+        expense_filter &= Q(branch_id=branch)
+        purchase_filter &= Q(branch_id=branch)
+
+    # Sales breakdown
+    sales = Sale.objects.filter(sale_filter)
+    total_sales = sales.aggregate(t=Sum('total_amount'))['t'] or 0
+    cash_sales = sales.filter(payment_method='cash').aggregate(t=Sum('total_amount'))['t'] or 0
+    credit_sales = sales.filter(payment_method='credit').aggregate(t=Sum('total_amount'))['t'] or 0
+    partial_sales = sales.filter(payment_method='partial').aggregate(t=Sum('total_amount'))['t'] or 0
+    cash_received_partial = sales.filter(payment_method='partial').aggregate(t=Sum('amount_paid'))['t'] or 0
+
+    # Actual cash received = cash sales + partial payments received
+    actual_cash_in = cash_sales + cash_received_partial
+
+    # Uncollected credit
+    uncollected = credit_sales + (partial_sales - cash_received_partial)
+
+    # Expenses (cash out)
+    total_expenses = Expense.objects.filter(expense_filter).aggregate(t=Sum('amount'))['t'] or 0
+
+    # Stock purchases (cash locked in stock)
+    stock_purchases = StockPurchase.objects.filter(purchase_filter).aggregate(
+        t=Sum(F('quantity') * F('cost_per_unit'))
+    )['t'] or 0
+
+    # Net cash position
+    net_cash = actual_cash_in - total_expenses - stock_purchases
+
+    # Monthly trend (last 6 months)
+    trend = []
+    for i in range(5, -1, -1):
+        d = datetime(year, month, 1) - timedelta(days=i * 30)
+        m, y = d.month, d.year
+        s = Sale.objects.filter(sale_date__month=m, sale_date__year=y)
+        if request.user.role == 'branch_manager' and request.user.branch:
+            s = s.filter(branch=request.user.branch)
+        cash_in = s.filter(payment_method='cash').aggregate(t=Sum('total_amount'))['t'] or 0
+        cash_in += s.filter(payment_method='partial').aggregate(t=Sum('amount_paid'))['t'] or 0
+        exp = Expense.objects.filter(date__month=m, date__year=y)
+        if request.user.role == 'branch_manager' and request.user.branch:
+            exp = exp.filter(branch=request.user.branch)
+        cash_out = exp.aggregate(t=Sum('amount'))['t'] or 0
+        trend.append({
+            'month': d.strftime('%b %Y'),
+            'cash_in': float(cash_in),
+            'cash_out': float(cash_out),
+            'net': float(cash_in - cash_out),
+        })
+
+    branches = Branch.objects.filter(status='active')
+    months = [(i, datetime(2000, i, 1).strftime('%B')) for i in range(1, 13)]
+    years = list(range(2024, datetime.today().year + 1))
+
+    return render(request, 'core/cash_flow_report.html', {
+        'title': 'Cash Flow Report',
+        'total_sales': total_sales,
+        'actual_cash_in': actual_cash_in,
+        'uncollected': uncollected,
+        'total_expenses': total_expenses,
+        'stock_purchases': stock_purchases,
+        'net_cash': net_cash,
+        'trend_json': json.dumps(trend),
+        'trend': trend,
+        'branches': branches,
+        'months': months,
+        'years': years,
+        'selected_month': month,
+        'selected_year': year,
+        'selected_branch': branch,
     })
