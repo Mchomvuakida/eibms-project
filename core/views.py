@@ -473,13 +473,12 @@ def stock_purchase(request):
 
                     if cost_per_unit:
                         Expense.objects.create(
-                            branch=product.branch,
-                            category='raw_materials',
-                            amount=cost_per_unit * quantity,
-                            description=f'Purchase: {quantity} {product.unit} of {product.name} from {supplier}. {notes}',
-                            date=date,
-                            created_by=request.user,
-                        )
+                        branch=product.branch,
+                        category='raw_materials',
+                        amount=cost_per_unit * quantity,
+                        description=f'Purchase: {quantity} {product.unit} of {product.name} from {supplier}. {notes}',
+                        date=date,
+                    )
 
                     messages.success(request, f'Stock updated! {quantity} {product.unit} of {product.name} added.')
                     return redirect('stock_purchase')
