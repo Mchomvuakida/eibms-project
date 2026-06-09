@@ -89,18 +89,18 @@ class Product(models.Model):
 
         if is_6inch:
             if cement_425:
-                # 42.5 cement → 38 blocks per bag (your latest rule)
-                recipe[cement_425.id] = Decimal('1') / Decimal('38')  # 0.025 bags per block
+                # 1 bag cement 42.5 → 36 blocks (6 inch)
+                recipe[cement_425.id] = Decimal('1') / Decimal('36')
             else:
                 raise ValueError("6-inch blocks require Cement 42.5 (not found in this branch)")
 
         elif is_5inch:
             if cement_325:
-                # 32.5 cement → 35 blocks per bag
-                recipe[cement_325.id] = Decimal('1') / Decimal('35')  # ≈ 0.02857 bags per block
+                # 1 bag cement 32.5 → 40 blocks (5 inch)
+                recipe[cement_325.id] = Decimal('1') / Decimal('40')
             elif cement_425:
-                # 42.5 cement → 40 blocks per bag (also allowed for 5-inch)
-                recipe[cement_425.id] = Decimal('1') / Decimal('40')  # ≈ 0.02632 bags per block
+                # 1 bag cement 42.5 → 40 blocks (5 inch)
+                recipe[cement_425.id] = Decimal('1') / Decimal('40')
             else:
                 raise ValueError("5-inch blocks require Cement 32.5 or 42.5 (not found in this branch)")
 
@@ -108,16 +108,15 @@ class Product(models.Model):
             raise ValueError(f"No production recipe defined for product: {self.name}")
 
         # Sand consumption (depends on which cement is used)
+        # Sand consumption based on real business data:
+        # 1 truck trip mchanga = 8 bags cement for both block sizes
+        # 6 inch: 1 bag = 36 blocks → 1 trip covers 288 blocks
+        # 5 inch: 1 bag = 40 blocks → 1 trip covers 320 blocks
         if recipe:
-            cement_id = list(recipe.keys())[0]
-            cement = Product.objects.get(id=cement_id)
-
-            if '32.5' in cement.name:
-                # 100 bags of 32.5 cement use 40 m³ sand → 0.4 m³ per block
-                sand_per_block = Decimal('40') / Decimal('100')
-            else:  # 42.5
-                # 100 bags of 42.5 cement use 32 m³ sand → 0.32 m³ per block
-                sand_per_block = Decimal('32') / Decimal('100')
+            if is_6inch:
+                sand_per_block = Decimal('1') / Decimal('288')
+            else:  # 5 inch
+                sand_per_block = Decimal('1') / Decimal('320')
 
             recipe[sand.id] = sand_per_block
 
