@@ -72,9 +72,10 @@ class Product(models.Model):
         ).first()
 
         sand = Product.objects.filter(
-            branch=self.branch,
-            name__icontains='sand',
-            is_raw_material=True
+             branch=self.branch,
+             is_raw_material=True
+        ).filter(
+            models.Q(name__icontains='sand') | models.Q(name__icontains='mchanga')
         ).first()
 
         if not sand:
