@@ -55,7 +55,7 @@ class Product(models.Model):
         """
         name_lower = self.name.lower()
 
-        if 'block' not in name_lower:
+        if 'block' not in name_lower and 'tofali' not in name_lower:
             return {}  # No recipe for non-block products
 
         # Find available cements in the same branch
