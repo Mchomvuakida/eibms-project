@@ -6,6 +6,7 @@ from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from core import views as core_views
 from django.shortcuts import redirect
+from django.views.generic import TemplateView
 
 urlpatterns = [
     path('', lambda request: redirect('/dashboard/'), name='home'),
@@ -19,6 +20,15 @@ urlpatterns = [
     # API endpoints
     path('api/dashboard/', core_views.api_dashboard_summary, name='api_dashboard'),
     path('api/stock/', core_views.api_stock_status, name='api_stock'),
+
+    path(
+        'sw.js',
+        TemplateView.as_view(
+            template_name='sw.js',
+            content_type='application/javascript'
+        ),
+        name='service-worker'
+    ),
 ]
 
 if settings.DEBUG:
