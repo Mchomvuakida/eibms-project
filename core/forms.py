@@ -1,6 +1,6 @@
 # core/forms.py
 from django import forms
-from .models import Expense, Branch, Production, Product, Customer, Sale, SaleItem, TripLog
+from .models import Expense, Branch, Production, Product, Customer, Sale, SaleItem, TripLog, BankDeposit
 from django.forms import formset_factory
 from django.contrib.auth.password_validation import validate_password
 from .models import User, Branch
@@ -251,3 +251,19 @@ class UserEditForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['branch'].queryset = Branch.objects.filter(status='active')
         self.fields['branch'].required = False
+
+class BankDepositForm(forms.ModelForm):
+    class Meta:
+        model = BankDeposit
+        fields = ['branch', 'amount', 'deposit_date', 'reference', 'notes']
+        widgets = {
+            'deposit_date': forms.DateInput(attrs={'type': 'date'}),
+            'notes': forms.Textarea(attrs={'rows': 2}),
+        }
+        labels = {
+            'branch': _('Branch'),
+            'amount': _('Amount Deposited (TZS)'),
+            'deposit_date': _('Deposit Date'),
+            'reference': _('Deposit Slip / Reference No.'),
+            'notes': _('Notes'),
+        }

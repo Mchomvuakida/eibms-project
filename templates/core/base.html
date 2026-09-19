@@ -209,6 +209,14 @@
        href="{% url 'expense_create' %}">
       <i class="bi bi-plus-circle"></i> Add Expense
     </a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'cash_reconciliation' %}active{% endif %}"
+       href="{% url 'cash_reconciliation' %}">
+      <i class="bi bi-bank"></i> Cash Reconciliation
+    </a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'deposit_create' %}active{% endif %}"
+       href="{% url 'deposit_create' %}">
+      <i class="bi bi-plus-circle"></i> Log Deposit
+    </a>
   </nav>
 
   {% if user.role == 'admin' or user.role == 'owner' or user.role == 'branch_manager' %}

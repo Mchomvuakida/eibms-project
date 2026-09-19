@@ -189,8 +189,30 @@ class Expense(models.Model):
     date = models.DateField(default=timezone.now)
     created_at = models.DateTimeField(default=timezone.now)
 
+    PAYMENT_SOURCES = [
+        ('cash', 'Cash'),
+        ('bank_mobile', 'Bank / Mobile Money'),
+    ]
+    payment_source = models.CharField(max_length=20, choices=PAYMENT_SOURCES, default='cash')
+
     def __str__(self):
         return f"{self.category} - {self.amount} TZS"
+
+
+class BankDeposit(models.Model):
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='bank_deposits')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    deposit_date = models.DateField(default=timezone.now)
+    reference = models.CharField(max_length=100, blank=True, help_text="Deposit slip number or bank reference")
+    notes = models.TextField(blank=True)
+    logged_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Deposit {self.amount} TZS - {self.branch} - {self.deposit_date}"
+
+    class Meta:
+        ordering = ['-deposit_date']
 
 
 class Production(models.Model):

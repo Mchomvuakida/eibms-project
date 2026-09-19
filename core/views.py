@@ -27,11 +27,11 @@ from rest_framework.response import Response
 
 from .models import (
     Expense, Branch, Production, Product, Sale,
-    Customer, Truck, TripLog, InventoryLog,User
+    Customer, Truck, TripLog, InventoryLog, User, BankDeposit
 )
 from .forms import (
     ExpenseForm, ProductionForm, SaleForm,
-    SaleItemFormSet, TripLogForm, StockPurchaseForm
+    SaleItemFormSet, TripLogForm, StockPurchaseForm, BankDepositForm
 )
 
 
@@ -58,6 +58,77 @@ def get_branch_filter(user):
     if user.role in ['admin', 'owner']:
         return None
     return user.branch
+
+
+@login_required
+def deposit_create(request):
+    if request.method == 'POST':
+        form = BankDepositForm(request.POST)
+        if form.is_valid():
+            deposit = form.save(commit=False)
+            deposit.logged_by = request.user
+            deposit.save()
+            messages.success(request, 'Deposit logged successfully.')
+            return redirect('cash_reconciliation')
+    else:
+        form = BankDepositForm()
+        if request.user.branch:
+            form.fields['branch'].initial = request.user.branch
+
+    return render(request, 'core/deposit_form.html', {
+        'form': form,
+        'title': 'Log Bank Deposit',
+    })
+
+
+@login_required
+def cash_reconciliation(request):
+    branch = get_branch_filter(request.user)
+
+    period = request.GET.get('period', 'this_month')
+    today = timezone.now().date()
+    if period == 'last_month':
+        first_of_this_month = today.replace(day=1)
+        end_date = first_of_this_month - timedelta(days=1)
+        start_date = end_date.replace(day=1)
+    else:
+        start_date = today.replace(day=1)
+        end_date = today
+
+    sales_qs = Sale.objects.filter(
+        payment_method='cash', sale_date__gte=start_date, sale_date__lte=end_date
+    )
+    expenses_qs = Expense.objects.filter(
+        payment_source='cash', date__gte=start_date, date__lte=end_date
+    )
+    deposits_qs = BankDeposit.objects.filter(
+        deposit_date__gte=start_date, deposit_date__lte=end_date
+    )
+
+    if branch:
+        sales_qs = sales_qs.filter(branch=branch)
+        expenses_qs = expenses_qs.filter(branch=branch)
+        deposits_qs = deposits_qs.filter(branch=branch)
+
+    cash_sales = sales_qs.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
+    cash_expenses = expenses_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    total_deposits = deposits_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+    expected_undeposited = cash_sales - cash_expenses - total_deposits
+
+    recent_deposits = deposits_qs.select_related('branch', 'logged_by').order_by('-deposit_date')[:20]
+
+    return render(request, 'core/cash_reconciliation.html', {
+        'title': 'Cash Reconciliation',
+        'period': period,
+        'start_date': start_date,
+        'end_date': end_date,
+        'cash_sales': cash_sales,
+        'cash_expenses': cash_expenses,
+        'total_deposits': total_deposits,
+        'expected_undeposited': expected_undeposited,
+        'recent_deposits': recent_deposits,
+    })
 
 
 # ─── Home / Dashboard ────────────────────────────────────────────────────────

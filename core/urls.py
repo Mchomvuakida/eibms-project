@@ -32,4 +32,6 @@ urlpatterns = [
     path('users/', views.user_list, name='user_list'),
     path('users/add/', views.user_create, name='user_create'),
     path('users/<int:user_id>/edit/', views.user_edit, name='user_edit'),
+    path('deposits/new/', views.deposit_create, name='deposit_create'),
+    path('reports/cash-reconciliation/', views.cash_reconciliation, name='cash_reconciliation'),
 ]

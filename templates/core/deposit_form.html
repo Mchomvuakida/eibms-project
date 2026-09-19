@@ -1,0 +1,47 @@
+{% extends 'core/base.html' %}
+{% load i18n %}
+
+{% block page_title %}{% trans "Log Bank Deposit" %}{% endblock %}
+{% block page_icon %}bank{% endblock %}
+
+{% block content %}
+  <div class="card shadow-lg border-0">
+    <div class="card-header bg-primary text-white d-flex align-items-center">
+      <i class="bi bi-bank me-2 fs-4"></i>
+      <h5 class="mb-0">{% trans "Log Bank Deposit" %}</h5>
+    </div>
+
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+
+        {% for field in form %}
+          <div class="mb-3">
+            <label for="{{ field.id_for_label }}" class="form-label fw-bold">
+              {{ field.label }}
+              {% if field.field.required %}
+                <span class="text-danger">*</span>
+              {% endif %}
+            </label>
+            {{ field }}
+            {% if field.help_text %}
+              <small class="form-text text-muted d-block mt-1">{{ field.help_text }}</small>
+            {% endif %}
+            {% if field.errors %}
+              <div class="invalid-feedback d-block">{{ field.errors }}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+
+        <div class="d-flex gap-3 mt-4">
+          <button type="submit" class="btn btn-success btn-lg">
+            <i class="bi bi-save me-1"></i> {% trans "Save Deposit" %}
+          </button>
+          <a href="{% url 'cash_reconciliation' %}" class="btn btn-outline-secondary btn-lg">
+            <i class="bi bi-x-circle me-1"></i> {% trans "Cancel" %}
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
