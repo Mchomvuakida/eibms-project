@@ -283,7 +283,10 @@ def sale_create(request):
 
 @login_required
 def sale_list(request):
+    branch = get_branch_filter(request.user)
     sales = Sale.objects.all().order_by('-sale_date')
+    if branch:
+        sales = sales.filter(branch=branch)
     return render(request, 'core/sale_list.html', {
         'sales': sales,
         'title': 'Sales Records',
@@ -487,9 +490,13 @@ def stock_purchase(request):
     else:
         form = StockPurchaseForm(user=request.user)
 
+    branch = get_branch_filter(request.user)
     recent_logs = InventoryLog.objects.filter(
         movement_type='purchase'
-    ).select_related('product', 'branch').order_by('-created_at')[:20]
+    ).select_related('product', 'branch').order_by('-created_at')
+    if branch:
+        recent_logs = recent_logs.filter(branch=branch)
+    recent_logs = recent_logs[:20]
 
     return render(request, 'core/stock_purchase.html', {
         'form': form,
@@ -500,7 +507,10 @@ def stock_purchase(request):
 
 @login_required
 def production_list(request):
+    branch = get_branch_filter(request.user)
     productions = Production.objects.all().order_by('-production_date')
+    if branch:
+        productions = productions.filter(branch=branch)
     return render(request, 'core/production_list.html', {
         'productions': productions,
         'title': 'Production Records',

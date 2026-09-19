@@ -7,11 +7,13 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from core import views as core_views
 from django.shortcuts import redirect
 from django.views.generic import TemplateView
+from django.conf.urls.i18n import i18n_patterns
 
 urlpatterns = [
     path('', lambda request: redirect('/dashboard/'), name='home'),
     path('admin/', admin.site.urls),
     path('', include('core.urls')),
+    path('i18n/', include('django.conf.urls.i18n')),
 
     # JWT Authentication endpoints
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),

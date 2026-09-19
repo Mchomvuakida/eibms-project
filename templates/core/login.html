@@ -1,6 +1,7 @@
 {% extends 'core/base_auth.html' %}
+{% load i18n %}
 
-{% block page_title %}Login{% endblock %}
+{% block page_title %}{% trans "Login" %}{% endblock %}
 {% block page_icon %}box-arrow-in-right{% endblock %}
 
 {% block content %}
@@ -10,11 +11,11 @@
         <div class="card-header bg-primary text-white text-center py-4">
           <i class="bi bi-building-fill-gear fs-1 mb-2"></i>
           <h4 class="mb-0">ES & RI EIBMS</h4>
-          <small>Integrated Business Management System</small>
+          <small>{% trans "Integrated Business Management System" %}</small>
         </div>
 
         <div class="card-body p-4">
-          <h5 class="text-center mb-4 text-muted">Sign in to your account</h5>
+          <h5 class="text-center mb-4 text-muted">{% trans "Sign in to your account" %}</h5>
 
           <form method="post">
             {% csrf_token %}
@@ -27,13 +28,13 @@
                     <span class="text-danger">*</span>
                   {% endif %}
                 </label>
-                
+
                 {{ field }}
-                
+
                 {% if field.help_text %}
                   <small class="form-text text-muted">{{ field.help_text }}</small>
                 {% endif %}
-                
+
                 {% if field.errors %}
                   <div class="invalid-feedback d-block">
                     {{ field.errors }}
@@ -43,12 +44,29 @@
             {% endfor %}
 
             <button type="submit" class="btn btn-primary btn-lg w-100 mt-3">
-              <i class="bi bi-box-arrow-in-right me-2"></i> Login
+              <i class="bi bi-box-arrow-in-right me-2"></i> {% trans "Login" %}
             </button>
           </form>
 
           <div class="text-center mt-4 small text-muted">
-            <p>Forgot password? Contact system administrator.</p>
+            <p>{% trans "Forgot password? Contact system administrator." %}</p>
+          </div>
+
+          <div class="text-center mt-3">
+            <form action="{% url 'set_language' %}" method="post" class="d-inline">
+              {% csrf_token %}
+              <input name="next" type="hidden" value="{{ request.path }}">
+              <select name="language" onchange="this.form.submit()" class="form-select form-select-sm w-auto d-inline-block">
+                {% get_current_language as LANGUAGE_CODE %}
+                {% get_available_languages as LANGUAGES %}
+                {% get_language_info_list for LANGUAGES as languages %}
+                {% for language in languages %}
+                  <option value="{{ language.code }}" {% if language.code == LANGUAGE_CODE %}selected{% endif %}>
+                    {{ language.name_local }}
+                  </option>
+                {% endfor %}
+              </select>
+            </form>
           </div>
         </div>
       </div>
