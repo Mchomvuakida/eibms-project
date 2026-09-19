@@ -78,3 +78,57 @@ msgstr "Ongeza Matumizi"
 
 msgid "New Production"
 msgstr "Uzalishaji Mpya"
+
+msgid "Record New Sale"
+msgstr "Andika Mauzo Mapya"
+
+msgid "Sale Details"
+msgstr "Maelezo ya Mauzo"
+
+msgid "Items Sold"
+msgstr "Bidhaa Zilizouzwa"
+
+msgid "Add Another Item"
+msgstr "Ongeza Bidhaa Nyingine"
+
+msgid "Record Sale"
+msgstr "Hifadhi Mauzo"
+
+msgid "Cancel"
+msgstr "Ghairi"
+
+msgid "Add New Expense"
+msgstr "Ongeza Matumizi Mapya"
+
+msgid "Save Expense"
+msgstr "Hifadhi Matumizi"
+
+msgid "Quantity"
+msgstr "Kiasi"
+
+msgid "Unit Price (TZS)"
+msgstr "Bei kwa Kipimo (TZS)"
+
+msgid "Branch"
+msgstr "Tawi"
+
+msgid "Truck"
+msgstr "Gari"
+
+msgid "Payment Method"
+msgstr "Njia ya Malipo"
+
+msgid "Amount Paid (TZS)"
+msgstr "Kiasi Kilicholipwa (TZS)"
+
+msgid "Category"
+msgstr "Aina"
+
+msgid "Amount (TZS)"
+msgstr "Kiasi (TZS)"
+
+msgid "Description"
+msgstr "Maelezo"
+
+msgid "Receipt Image"
+msgstr "Picha ya Risiti"

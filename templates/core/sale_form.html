@@ -1,13 +1,14 @@
 {% extends 'core/base.html' %}
+{% load i18n %}
 
-{% block page_title %}Record New Sale{% endblock %}
+{% block page_title %}{% trans "Record New Sale" %}{% endblock %}
 {% block page_icon %}cart-plus{% endblock %}
 
 {% block content %}
   <div class="card shadow-lg border-0">
     <div class="card-header bg-primary text-white d-flex align-items-center">
       <i class="bi bi-cart-plus me-2 fs-4"></i>
-      <h5 class="mb-0">Record New Sale</h5>
+      <h5 class="mb-0">{% trans "Record New Sale" %}</h5>
     </div>
 
     <div class="card-body">
@@ -16,7 +17,7 @@
 
         <!-- Sale Details -->
         <h5 class="mb-3 border-bottom pb-2 text-primary">
-          <i class="bi bi-info-circle me-2"></i>Sale Details
+          <i class="bi bi-info-circle me-2"></i>{% trans "Sale Details" %}
         </h5>
         {% for field in sale_form %}
           <div class="mb-3">
@@ -40,7 +41,7 @@
 
         <!-- Items -->
         <h5 class="mt-5 mb-3 border-bottom pb-2 text-primary">
-          <i class="bi bi-list-ul me-2"></i>Items Sold
+          <i class="bi bi-list-ul me-2"></i>{% trans "Items Sold" %}
         </h5>
 
         {{ item_formset.management_form }}
@@ -58,13 +59,13 @@
 
         <div class="d-flex gap-3 mt-4">
           <button type="button" class="btn btn-outline-secondary" onclick="addItemForm()">
-            <i class="bi bi-plus-circle me-1"></i> Add Another Item
+            <i class="bi bi-plus-circle me-1"></i> {% trans "Add Another Item" %}
           </button>
           <button type="submit" class="btn btn-success btn-lg">
-            <i class="bi bi-save me-1"></i> Record Sale
+            <i class="bi bi-save me-1"></i> {% trans "Record Sale" %}
           </button>
           <a href="{% url 'sale_list' %}" class="btn btn-outline-secondary btn-lg">
-            <i class="bi bi-x-circle me-1"></i> Cancel
+            <i class="bi bi-x-circle me-1"></i> {% trans "Cancel" %}
           </a>
         </div>
       </form>

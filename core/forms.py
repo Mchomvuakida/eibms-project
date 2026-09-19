@@ -4,6 +4,7 @@ from .models import Expense, Branch, Production, Product, Customer, Sale, SaleIt
 from django.forms import formset_factory
 from django.contrib.auth.password_validation import validate_password
 from .models import User, Branch
+from django.utils.translation import gettext_lazy as _
 
 class SaleItemForm(forms.ModelForm):
     class Meta:
@@ -11,6 +12,11 @@ class SaleItemForm(forms.ModelForm):
         fields = ['product', 'quantity', 'unit_price']
         widgets = {
             'product': forms.Select(attrs={'class': 'form-select'}),
+        }
+        labels = {
+            'product': _('Product'),
+            'quantity': _('Quantity'),
+            'unit_price': _('Unit Price (TZS)'),
         }
 
     def __init__(self, *args, **kwargs):
@@ -39,6 +45,13 @@ class SaleForm(forms.ModelForm):
         widgets = {
             'customer': forms.Select(attrs={'class': 'form-select'}),
         }
+        labels = {
+            'branch': _('Branch'),
+            'customer': _('Customer'),
+            'truck': _('Truck'),
+            'payment_method': _('Payment Method'),
+            'amount_paid': _('Amount Paid (TZS)'),
+        }
 
     def __init__(self, *args, **kwargs):
         user = kwargs.pop('user', None)
@@ -57,6 +70,15 @@ class ExpenseForm(forms.ModelForm):
             'date': forms.DateInput(attrs={'type': 'date'}),
             'description': forms.Textarea(attrs={'rows': 3}),
             'category': forms.Select(attrs={'class': 'form-select'}),
+        }
+        labels = {
+            'branch': _('Branch'),
+            'truck': _('Truck'),
+            'category': _('Category'),
+            'amount': _('Amount (TZS)'),
+            'description': _('Description'),
+            'receipt_image': _('Receipt Image'),
+            'date': _('Date'),
         }
 
 

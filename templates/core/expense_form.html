@@ -1,13 +1,14 @@
 {% extends 'core/base.html' %}
+{% load i18n %}
 
-{% block page_title %}Add New Expense{% endblock %}
+{% block page_title %}{% trans "Add New Expense" %}{% endblock %}
 {% block page_icon %}plus-circle{% endblock %}
 
 {% block content %}
   <div class="card shadow-lg border-0">
     <div class="card-header bg-primary text-white d-flex align-items-center">
       <i class="bi bi-plus-circle me-2 fs-4"></i>
-      <h5 class="mb-0">Add New Expense</h5>
+      <h5 class="mb-0">{% trans "Add New Expense" %}</h5>
     </div>
     
     <div class="card-body">
@@ -41,10 +42,10 @@
 
         <div class="d-flex gap-3 mt-4">
           <button type="submit" class="btn btn-success btn-lg">
-            <i class="bi bi-save me-1"></i> Save Expense
+            <i class="bi bi-save me-1"></i> {% trans "Save Expense" %}
           </button>
           <a href="{% url 'expense_list' %}" class="btn btn-outline-secondary btn-lg">
-            <i class="bi bi-x-circle me-1"></i> Cancel
+            <i class="bi bi-x-circle me-1"></i> {% trans "Cancel" %}
           </a>
         </div>
       </form>

@@ -113,7 +113,10 @@
 </div>
 
 <!-- Actions -->
-<div class="d-flex justify-content-end mt-4">
+<div class="d-flex justify-content-end gap-2 mt-4">
+  <a href="{% url 'sale_invoice_pdf' sale.id %}" class="btn btn-success btn-lg">
+    <i class="bi bi-file-earmark-pdf me-2"></i> Download Invoice
+  </a>
   <a href="{% url 'sale_list' %}" class="btn btn-outline-secondary btn-lg">
     <i class="bi bi-arrow-left-circle me-2"></i> Back to Sales List
   </a>

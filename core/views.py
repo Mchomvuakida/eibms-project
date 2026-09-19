@@ -12,6 +12,12 @@ from django import forms
 from datetime import timedelta, datetime, date
 from decimal import Decimal
 from functools import wraps
+from django.http import HttpResponse
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import csv
 import pandas as pd
 
@@ -307,6 +313,80 @@ def sale_detail(request, sale_id):
         'title': f'Sale #{sale.id} — {sale.sale_date}',
     })
 
+@login_required
+def sale_invoice_pdf(request, sale_id):
+    sale = get_object_or_404(Sale, id=sale_id)
+    if request.user.role not in ['admin', 'owner'] and sale.branch != request.user.branch:
+        raise PermissionDenied('You do not have access to this sale.')
+
+    items = sale.items.all()
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="Invoice_Sale_{sale.id}.pdf"'
+
+    doc = SimpleDocTemplate(response, pagesize=A4, topMargin=20 * mm, bottomMargin=20 * mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, spaceAfter=2)
+    sub_style = ParagraphStyle('SubStyle', parent=styles['Normal'], textColor=colors.grey, spaceAfter=14)
+
+    elements.append(Paragraph("ES & RI Enterprises", title_style))
+    elements.append(Paragraph(f"{sale.branch.name} Branch &mdash; {sale.branch.location}", sub_style))
+    elements.append(Paragraph(f"INVOICE #{sale.id}", styles['Heading2']))
+    elements.append(Spacer(1, 6))
+
+    customer_name = sale.customer.name if sale.customer else "Walk-in Customer"
+    customer_phone = sale.customer.phone if sale.customer and sale.customer.phone else "-"
+
+    info_data = [
+        ["Bill To:", customer_name],
+        ["Phone:", customer_phone],
+        ["Date:", sale.sale_date.strftime('%d %B %Y')],
+        ["Payment Status:", sale.get_payment_status_display()],
+    ]
+    info_table = Table(info_data, colWidths=[35 * mm, 100 * mm])
+    info_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 16))
+
+    table_data = [["Product", "Quantity", "Unit Price (TZS)", "Total (TZS)"]]
+    for item in items:
+        table_data.append([
+            item.product.name,
+            f"{item.quantity:g}",
+            f"{item.unit_price:,.0f}",
+            f"{item.total_price:,.0f}",
+        ])
+    table_data.append(["", "", "Grand Total", f"{sale.total_amount:,.0f} TZS"])
+    table_data.append(["", "", "Amount Paid", f"{sale.amount_paid:,.0f} TZS"])
+    balance_due = sale.total_amount - sale.amount_paid
+    table_data.append(["", "", "Balance Due", f"{balance_due:,.0f} TZS"])
+
+    items_table = Table(table_data, colWidths=[70 * mm, 25 * mm, 35 * mm, 35 * mm])
+    items_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a1d23')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, len(items)), 0.5, colors.grey),
+        ('LINEABOVE', (2, -3), (-1, -3), 1, colors.black),
+        ('FONTNAME', (2, -3), (-1, -1), 'Helvetica-Bold'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(items_table)
+    elements.append(Spacer(1, 24))
+
+    elements.append(Paragraph("Thank you for your business.", styles['Normal']))
+
+    doc.build(elements)
+    return response
 
 # ─── Customers ───────────────────────────────────────────────────────────────
 
