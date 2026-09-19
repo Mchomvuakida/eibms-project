@@ -24,3 +24,57 @@ msgstr "Umesahau nenosiri? Wasiliana na msimamizi wa mfumo."
 
 msgid "Language"
 msgstr "Lugha"
+
+msgid "Today's Sales"
+msgstr "Mauzo ya Leo"
+
+msgid "Today's Expenses"
+msgstr "Matumizi ya Leo"
+
+msgid "Low Stock Items"
+msgstr "Bidhaa Zinazopungua"
+
+msgid "Low Stock Alert"
+msgstr "Onyo la Bidhaa Zinazopungua"
+
+msgid "Product"
+msgstr "Bidhaa"
+
+msgid "Current Stock"
+msgstr "Kiasi Kilichopo"
+
+msgid "Minimum"
+msgstr "Kiwango cha Chini"
+
+msgid "Recent Sales"
+msgstr "Mauzo ya Hivi Karibuni"
+
+msgid "Date"
+msgstr "Tarehe"
+
+msgid "Customer"
+msgstr "Mteja"
+
+msgid "Total (TZS)"
+msgstr "Jumla (TZS)"
+
+msgid "Status"
+msgstr "Hali"
+
+msgid "Walk-in"
+msgstr "Mteja wa Papo Hapo"
+
+msgid "No sales today yet."
+msgstr "Hakuna mauzo bado leo."
+
+msgid "New Sale"
+msgstr "Mauzo Mapya"
+
+msgid "Stock Purchase"
+msgstr "Ununuzi wa Bidhaa"
+
+msgid "Add Expense"
+msgstr "Ongeza Matumizi"
+
+msgid "New Production"
+msgstr "Uzalishaji Mpya"

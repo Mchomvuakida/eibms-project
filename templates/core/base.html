@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% load static %}
+  {% load i18n %}
   <title>{% block title %}EIBMS – ES & RI Integrated Business Management System{% endblock %}</title>
   <link rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon">
   <link rel="manifest" href="{% static 'manifest.json' %}">
@@ -272,6 +273,22 @@
       {{ user.get_full_name|default:user.username }}
       <span style="display:block; font-size:10px; color:rgba(255,255,255,0.3);">{{ user.role|title }}</span>
     </div>
+        <form action="{% url 'set_language' %}" method="post" class="mb-2">
+      {% csrf_token %}
+      <input name="next" type="hidden" value="{{ request.path }}">
+      <select name="language" onchange="this.form.submit()"
+              class="form-select form-select-sm"
+              style="background:rgba(255,255,255,0.1); color:#fff; border-color:rgba(255,255,255,0.2); font-size:11px;">
+        {% get_current_language as LANGUAGE_CODE %}
+        {% get_available_languages as LANGUAGES %}
+        {% get_language_info_list for LANGUAGES as languages %}
+        {% for language in languages %}
+          <option value="{{ language.code }}" {% if language.code == LANGUAGE_CODE %}selected{% endif %}>
+            {{ language.name_local }}
+          </option>
+        {% endfor %}
+      </select>
+    </form>
     <form method="post" action="{% url 'logout' %}">
       {% csrf_token %}
       <button type="submit" style="background:none; border:none; color:rgba(255,100,100,0.8); font-size:12px; padding:0; cursor:pointer;">
