@@ -34,6 +34,10 @@ class Product(models.Model):
             ('timber', 'Timber Products'),
             ('pebbles', 'Pebbles/Aggregates'),
             ('hardware', 'Hardware'),
+            ('electrical', 'Electrical'),
+            ('plumbing', 'Plumbing'),
+            ('paint', 'Paint & Finishing'),
+            ('tools', 'Tools'),
         ]
     )
     unit = models.CharField(max_length=20)           # bag, piece, cubic_meter, etc.

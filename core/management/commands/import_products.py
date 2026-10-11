@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation
 from django.core.management.base import BaseCommand
 from core.models import Branch, Product
 
-VALID_CATEGORIES = {'raw_material', 'blocks', 'timber', 'pebbles', 'hardware'}
+VALID_CATEGORIES = {'raw_material', 'blocks', 'timber', 'pebbles', 'hardware', 'electrical', 'plumbing', 'paint', 'tools'}
 TRUE_VALUES = {'true', '1', 'yes', 'y'}
 
 
