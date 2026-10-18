@@ -14,8 +14,8 @@ class BranchAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'branch', 'category', 'is_raw_material', 'current_stock', 'min_threshold')
-    list_filter = ('branch', 'category', 'is_raw_material')
+    list_display = ('name', 'branch', 'category', 'is_raw_material', 'current_stock', 'min_threshold', 'services')
+    list_filter = ('branch', 'category', 'is_raw_material', 'services')
     search_fields = ('name', 'sku')
 
 

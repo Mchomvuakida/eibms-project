@@ -38,6 +38,7 @@ class Product(models.Model):
             ('plumbing', 'Plumbing'),
             ('paint', 'Paint & Finishing'),
             ('tools', 'Tools'),
+            ('services', 'Services'),
         ]
     )
     unit = models.CharField(max_length=20)           # bag, piece, cubic_meter, etc.
@@ -46,6 +47,10 @@ class Product(models.Model):
     current_stock = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     min_threshold = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     is_raw_material = models.BooleanField(default=False)   # key flag for production
+    track_stock = models.BooleanField(
+        default=True,
+        help_text="Untick for services or goods delivered straight to the customer (transport, direct sand delivery). Stock is then not checked or reduced."
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(default=timezone.now)
 

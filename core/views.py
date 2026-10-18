@@ -158,7 +158,8 @@ def clerk_dashboard(request):
     low_stock = Product.objects.filter(
         branch=branch,
         current_stock__lte=F('min_threshold'),
-        is_active=True
+        is_active=True,
+        track_stock=True
     ).select_related('branch')
 
     recent_sales = Sale.objects.filter(
@@ -215,7 +216,8 @@ def main_dashboard(request):
 
     # Alerts
     low_stock = products_qs.filter(
-        current_stock__lte=F('min_threshold')
+        current_stock__lte=F('min_threshold'),
+        track_stock=True
     ).order_by('current_stock')
     overdue_count = customers_qs.filter(balance_owed__gt=0).count()
     overdue_amount = customers_qs.filter(balance_owed__gt=0).aggregate(
@@ -310,24 +312,27 @@ def sale_create(request):
                             sale.total_amount += item.total_price
 
                             product = item.product
-                            if product.current_stock < item.quantity:
-                                raise ValidationError(f'Insufficient stock for {product.name}')
+                            if product.track_stock:
+                                if product.current_stock < item.quantity:
+                                    raise ValidationError(f'Insufficient stock for {product.name}')
 
-                            stock_before = product.current_stock
-                            Product.objects.filter(id=product.id).update(
-                                current_stock=F('current_stock') - item.quantity
-                            )
-                            item.save()
-                            InventoryLog.objects.create(
-                                product=product,
-                                branch=sale.branch,
-                                movement_type='sale',
-                                quantity=-item.quantity,
-                                stock_before=stock_before,
-                                stock_after=stock_before - item.quantity,
-                                reference_note=f'Sale #{sale.id}',
-                                created_by=request.user,
-                            )
+                                stock_before = product.current_stock
+                                Product.objects.filter(id=product.id).update(
+                                    current_stock=F('current_stock') - item.quantity
+                                )
+                                item.save()
+                                InventoryLog.objects.create(
+                                    product=product,
+                                    branch=sale.branch,
+                                    movement_type='sale',
+                                    quantity=-item.quantity,
+                                    stock_before=stock_before,
+                                    stock_after=stock_before - item.quantity,
+                                    reference_note=f'Sale #{sale.id}',
+                                    created_by=request.user,
+                                )
+                            else:
+                                item.save()
 
                     sale.created_by = request.user
                     sale.save()
@@ -1118,8 +1123,8 @@ def api_dashboard_summary(request):
                 customers_qs.filter(balance_owed__gt=0).aggregate(
                     total=Sum('balance_owed'))['total'] or 0),
             'low_stock_products': products_qs.filter(
-                current_stock__lte=F('min_threshold'), is_active=True).count(),
-        },
+                current_stock__lte=F('min_threshold'), is_active=True, track_stock=True).count(),       
+                  },
     })
 
 
@@ -1136,7 +1141,7 @@ def api_stock_status(request):
         'category': p.category, 'unit': p.unit,
         'current_stock': float(p.current_stock),
         'min_threshold': float(p.min_threshold),
-        'is_low': p.current_stock <= p.min_threshold,
+        'is_low': p.track_stock and p.current_stock <= p.min_threshold,
         'selling_price_tzs': float(p.selling_price) if p.selling_price else None,
     } for p in products]
 

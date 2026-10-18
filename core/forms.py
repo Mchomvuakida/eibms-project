@@ -1,5 +1,6 @@
 # core/forms.py
 from django import forms
+from django.db.models import Q
 from .models import Expense, Branch, Production, Product, Customer, Sale, SaleItem, TripLog, BankDeposit
 from django.forms import formset_factory
 from django.contrib.auth.password_validation import validate_password
@@ -24,15 +25,13 @@ class SaleItemForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if user and user.role in ['admin', 'owner']:
             self.fields['product'].queryset = Product.objects.filter(
-                is_raw_material=False,
-                current_stock__gt=0
-            )
+                is_raw_material=False
+            ).filter(Q(current_stock__gt=0) | Q(track_stock=False))
         elif user and user.branch:
             self.fields['product'].queryset = Product.objects.filter(
                 branch=user.branch,
-                is_raw_material=False,
-                current_stock__gt=0
-            )
+                is_raw_material=False
+            ).filter(Q(current_stock__gt=0) | Q(track_stock=False))
 
 
 SaleItemFormSet = formset_factory(SaleItemForm, extra=1, can_delete=True)

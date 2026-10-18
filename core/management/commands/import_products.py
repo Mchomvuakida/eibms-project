@@ -1,6 +1,7 @@
 import csv
 from decimal import Decimal, InvalidOperation
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from core.models import Branch, Product
 
 VALID_CATEGORIES = {
@@ -8,6 +9,10 @@ VALID_CATEGORIES = {
     'electrical', 'plumbing', 'paint', 'tools',
 }
 TRUE_VALUES = {'true', '1', 'yes', 'y'}
+UPDATE_FIELDS = [
+    'category', 'unit', 'cost_price', 'selling_price',
+    'current_stock', 'min_threshold', 'is_raw_material', 'is_active',
+]
 
 
 def clean_number(value):
@@ -16,16 +21,16 @@ def clean_number(value):
     if value == '':
         return None
     if ',' in value and '.' in value:
-        if value.rfind(',') > value.rfind('.'):      # 1.234,50
+        if value.rfind(',') > value.rfind('.'):
             value = value.replace('.', '').replace(',', '.')
-        else:                                        # 1,234.50
+        else:
             value = value.replace(',', '')
     elif ',' in value:
         head, _, tail = value.rpartition(',')
         if len(tail) == 3 and head.replace(',', '').isdigit():
-            value = value.replace(',', '')           # 2,000 -> 2000
+            value = value.replace(',', '')
         else:
-            value = value.replace(',', '.')          # 1,5 -> 1.5
+            value = value.replace(',', '.')
     return Decimal(value)
 
 
@@ -37,11 +42,12 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         path = options['csv_path']
-        created_count = 0
-        updated_count = 0
         errors = []
 
         branch_cache = {b.name.lower(): b for b in Branch.objects.all()}
+        existing = {(p.branch_id, p.name): p for p in Product.objects.all()}
+        to_create = {}
+        to_update = {}
 
         with open(path, newline='', encoding='utf-8-sig') as f:
             first_line = f.readline()
@@ -80,29 +86,38 @@ class Command(BaseCommand):
                     errors.append(f"Row {i} ({name}): cannot read number -> {bad} - skipped")
                     continue
 
-                is_raw_material = (row.get('is_raw_material') or '').strip().lower() in TRUE_VALUES
+                values = {
+                    'category': category,
+                    'unit': (row.get('unit') or '').strip(),
+                    'cost_price': numbers['cost_price'],
+                    'selling_price': numbers['selling_price'],
+                    'current_stock': numbers['current_stock'] or Decimal('0'),
+                    'min_threshold': numbers['min_threshold'] or Decimal('0'),
+                    'is_raw_material': (row.get('is_raw_material') or '').strip().lower() in TRUE_VALUES,
+                    'is_active': True,
+                }
 
-                obj, created = Product.objects.update_or_create(
-                    branch=branch,
-                    name=name,
-                    defaults={
-                        'category': category,
-                        'unit': (row.get('unit') or '').strip(),
-                        'cost_price': numbers['cost_price'],
-                        'selling_price': numbers['selling_price'],
-                        'current_stock': numbers['current_stock'] or Decimal('0'),
-                        'min_threshold': numbers['min_threshold'] or Decimal('0'),
-                        'is_raw_material': is_raw_material,
-                        'is_active': True,
-                    }
-                )
-                if created:
-                    created_count += 1
+                key = (branch.id, name)
+                if key in existing:
+                    obj = existing[key]
+                    for k, v in values.items():
+                        setattr(obj, k, v)
+                    to_update[key] = obj
+                elif key in to_create:
+                    obj = to_create[key]
+                    for k, v in values.items():
+                        setattr(obj, k, v)
                 else:
-                    updated_count += 1
+                    to_create[key] = Product(branch=branch, name=name, **values)
+
+        self.stdout.write(f'Read CSV: {len(to_create)} new, {len(to_update)} existing. Saving...')
+
+        with transaction.atomic():
+            Product.objects.bulk_create(list(to_create.values()), batch_size=200)
+            Product.objects.bulk_update(list(to_update.values()), UPDATE_FIELDS, batch_size=200)
 
         self.stdout.write(self.style.SUCCESS(
-            f'Done. {created_count} products created, {updated_count} updated.'
+            f'Done. {len(to_create)} products created, {len(to_update)} updated.'
         ))
         if errors:
             self.stdout.write(self.style.WARNING(f'{len(errors)} row(s) had problems:'))
