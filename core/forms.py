@@ -2,6 +2,7 @@
 from django import forms
 from django.db.models import Q
 from .models import Expense, Branch, Production, Product, Customer, Sale, SaleItem, TripLog, BankDeposit
+from .models import Supplier, Truck, SpendingRequest, EXPENSE_CATEGORIES
 from django.forms import formset_factory
 from django.contrib.auth.password_validation import validate_password
 from .models import User, Branch
@@ -120,7 +121,121 @@ class TripLogForm(forms.ModelForm):
             raise forms.ValidationError("End odometer cannot be less than start odometer.")
         return cleaned_data
 
+PAY_METHODS = [('cash', 'Cash'), ('mobile_money', 'Mobile Money'), ('bank_transfer', 'Bank Transfer')]
+
+
+class BootstrapMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            if isinstance(field.widget, forms.CheckboxInput):
+                continue
+            css = 'form-select' if isinstance(field.widget, forms.Select) else 'form-control'
+            field.widget.attrs.setdefault('class', css)
+
+
 class StockPurchaseForm(forms.Form):
+    product = forms.ModelChoiceField(
+        queryset=Product.objects.none(),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Product'
+    )
+    quantity = forms.DecimalField(
+        max_digits=12, decimal_places=2,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+        label='Quantity Received'
+    )
+    cost_per_unit = forms.DecimalField(
+        max_digits=12, decimal_places=2, required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+        label='Cost per Unit (TZS) — optional'
+    )
+    supplier = forms.ModelChoiceField(
+        queryset=Supplier.objects.filter(is_active=True), required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Supplier from list — choose one to record a bill'
+    )
+    supplier_name = forms.CharField(
+        max_length=200, required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        label='Or type a supplier name — optional'
+    )
+    amount_paid_now = forms.DecimalField(
+        max_digits=12, decimal_places=2, required=False, min_value=0,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+        label='Paid now (TZS) — only with a listed supplier; leave empty if taken on credit'
+    )
+    payment_method = forms.ChoiceField(
+        choices=PAY_METHODS, required=False, initial='cash',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='How the amount paid now was paid'
+    )
+    due_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        label='Pay supplier by — optional'
+    )
+    date = forms.DateField(
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        label='Date'
+    )
+    notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+        label='Notes — optional'
+    )
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        if user:
+            if user.role in ['admin', 'owner']:
+                self.fields['product'].queryset = Product.objects.all()
+            elif user.branch:
+                self.fields['product'].queryset = Product.objects.filter(branch=user.branch)
+
+
+class SupplierForm(BootstrapMixin, forms.ModelForm):
+    class Meta:
+        model = Supplier
+        fields = ['name', 'phone', 'notes']
+        widgets = {'notes': forms.Textarea(attrs={'rows': 2})}
+
+
+class SupplierBillForm(BootstrapMixin, forms.Form):
+    supplier = forms.ModelChoiceField(queryset=Supplier.objects.filter(is_active=True))
+    branch = forms.ModelChoiceField(queryset=Branch.objects.all(), required=False,
+                                    label='Branch (owner/admin only)')
+    category = forms.ChoiceField(choices=EXPENSE_CATEGORIES)
+    description = forms.CharField(max_length=255, label='What was bought')
+    amount = forms.DecimalField(max_digits=12, decimal_places=2, min_value=1, label='Total amount (TZS)')
+    bill_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}), label='Date')
+    due_date = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}),
+                               label='Pay supplier by — optional')
+    reference = forms.CharField(max_length=100, required=False, label='Invoice / delivery note no. — optional')
+    amount_paid_now = forms.DecimalField(max_digits=12, decimal_places=2, required=False, min_value=0,
+                                         label='Paid now (TZS) — leave empty if all on credit')
+    payment_method = forms.ChoiceField(choices=PAY_METHODS, required=False, initial='cash',
+                                       label='How the amount paid now was paid')
+    truck = forms.ModelChoiceField(queryset=Truck.objects.all(), required=False,
+                                   label='Truck (if this is a truck cost)')
+
+
+class BillPayForm(BootstrapMixin, forms.Form):
+    amount = forms.DecimalField(max_digits=12, decimal_places=2, min_value=1, label='Amount paid (TZS)')
+    method = forms.ChoiceField(choices=PAY_METHODS, label='Paid by')
+    payment_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}), label='Date paid')
+    notes = forms.CharField(max_length=255, required=False, label='Note — optional')
+
+
+class SpendingRequestForm(BootstrapMixin, forms.ModelForm):
+    class Meta:
+        model = SpendingRequest
+        fields = ['amount', 'reason']
+        widgets = {'reason': forms.Textarea(attrs={'rows': 3})}
+        labels = {'amount': 'Amount needed (TZS)', 'reason': 'What it is for and why'}
+        
+class StockPurchaseFormOld(forms.Form):
     product = forms.ModelChoiceField(
         queryset=Product.objects.none(),
         widget=forms.Select(attrs={'class': 'form-select'}),

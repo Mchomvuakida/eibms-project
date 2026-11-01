@@ -209,6 +209,7 @@
        href="{% url 'expense_create' %}">
       <i class="bi bi-plus-circle"></i> Add Expense
     </a>
+    {% if user.role == 'admin' or user.role == 'owner' or user.role == 'branch_manager' %}
     <a class="nav-link {% if request.resolver_match.url_name == 'cash_reconciliation' %}active{% endif %}"
        href="{% url 'cash_reconciliation' %}">
       <i class="bi bi-bank"></i> Cash Reconciliation
@@ -217,6 +218,23 @@
        href="{% url 'deposit_create' %}">
       <i class="bi bi-plus-circle"></i> Log Deposit
     </a>
+    {% endif %}
+    {% if user.role == 'admin' or user.role == 'owner' %}
+    <a class="nav-link {% if request.resolver_match.url_name == 'audit_log' %}active{% endif %}"
+       href="{% url 'audit_log' %}">
+      <i class="bi bi-journal-text"></i> Audit Log
+    </a>
+        {% if user.role == 'admin' or user.role == 'owner' or user.role == 'branch_manager' %}
+    <a class="nav-link {% if request.resolver_match.url_name == 'supplier_list' %}active{% endif %}"
+       href="{% url 'supplier_list' %}">
+      <i class="bi bi-people"></i> Suppliers
+    </a>
+    {% endif %}
+    <a class="nav-link {% if request.resolver_match.url_name == 'request_list' %}active{% endif %}"
+       href="{% url 'request_list' %}">
+      <i class="bi bi-check2-square"></i> Spending Requests
+    </a>
+    {% endif %}
   </nav>
 
   {% if user.role == 'admin' or user.role == 'owner' or user.role == 'branch_manager' %}

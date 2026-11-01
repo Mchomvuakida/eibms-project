@@ -20,6 +20,7 @@
   <div class="card-body p-0">
     <!-- Summary Cards -->
     <div class="row g-3 p-4 bg-light border-bottom">
+      {% if not is_clerk %}
       <div class="col-md-3">
         <div class="card text-white bg-primary h-100 shadow-sm">
           <div class="card-body text-center">
@@ -28,6 +29,7 @@
           </div>
         </div>
       </div>
+      {% endif %}
       <div class="col-md-3">
         <div class="card text-white bg-success h-100 shadow-sm">
           <div class="card-body text-center">
@@ -36,6 +38,7 @@
           </div>
         </div>
       </div>
+      {% if not is_clerk %}
       <div class="col-md-3">
         <div class="card text-white bg-info h-100 shadow-sm">
           <div class="card-body text-center">
@@ -52,6 +55,7 @@
           </div>
         </div>
       </div>
+      {% endif %}
     </div>
 
     <!-- Table -->

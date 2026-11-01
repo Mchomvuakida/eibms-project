@@ -101,3 +101,33 @@ class InventoryLogAdmin(admin.ModelAdmin):
     search_fields = ('product__name', 'reference_note')
     date_hierarchy = 'created_at'
     readonly_fields = ('stock_before', 'stock_after', 'created_at')
+
+from .models import Payment, AuditLog
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ('payment_date', 'branch', 'customer', 'amount', 'method', 'kind', 'received_by')
+    list_filter = ('branch', 'method', 'kind')
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'user', 'action', 'model_name', 'object_repr')
+    list_filter = ('action', 'model_name')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+from .models import Supplier, SupplierBill, SupplierPayment, SpendingRequest
+
+admin.site.register(Supplier)
+admin.site.register(SupplierBill)
+admin.site.register(SupplierPayment)
+admin.site.register(SpendingRequest)

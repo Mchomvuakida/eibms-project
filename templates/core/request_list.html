@@ -1,0 +1,61 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="text-muted">Spending above <strong>{{ limit|intcomma }} TZS</strong> needs the CEO's approval.</div>
+  <a href="{% url 'request_create' %}" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i> New request</a>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white border-bottom fw-semibold">Waiting for a decision</div>
+  <div class="table-responsive">
+    <table class="table mb-0 align-middle">
+      <thead class="table-light"><tr><th>Date</th><th>Branch</th><th>By</th><th class="text-end">Amount</th><th>Reason</th><th></th></tr></thead>
+      <tbody>
+        {% for r in pending %}
+        <tr>
+          <td>{{ r.created_at|date:"d M Y" }}</td>
+          <td>{{ r.branch.name|default:"—" }}</td>
+          <td>{{ r.requested_by.username }}</td>
+          <td class="text-end fw-bold">{{ r.amount|floatformat:0|intcomma }}</td>
+          <td class="small">{{ r.reason }}</td>
+          <td style="min-width:260px">
+            {% if can_decide %}
+            <form method="post" action="{% url 'request_decide' r.id %}" class="d-flex gap-1">
+              {% csrf_token %}
+              <input type="text" name="note" class="form-control form-control-sm" placeholder="Note (optional)">
+              <button name="action" value="approve" class="btn btn-sm btn-success">Approve</button>
+              <button name="action" value="reject" class="btn btn-sm btn-outline-danger">Reject</button>
+            </form>
+            {% else %}<span class="badge bg-warning text-dark">waiting</span>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-3">Nothing waiting.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white border-bottom fw-semibold">History</div>
+  <table class="table table-sm mb-0">
+    <thead class="table-light"><tr><th>Date</th><th>By</th><th class="text-end">Amount</th><th>Reason</th><th>Status</th><th>Decided by</th></tr></thead>
+    <tbody>
+      {% for r in history %}
+      <tr>
+        <td>{{ r.created_at|date:"d M Y" }}</td>
+        <td>{{ r.requested_by.username }}</td>
+        <td class="text-end">{{ r.amount|floatformat:0|intcomma }}</td>
+        <td class="small">{{ r.reason|truncatechars:60 }}</td>
+        <td><span class="badge {% if r.status == 'rejected' %}bg-danger{% elif r.status == 'used' %}bg-secondary{% else %}bg-success{% endif %}">{{ r.status }}</span></td>
+        <td class="small">{{ r.decided_by.username|default:"—" }} {{ r.decision_note }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-center text-muted py-3">No history yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

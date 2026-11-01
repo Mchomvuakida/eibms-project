@@ -28,6 +28,7 @@
                 {% endif %}
               </div>
             {% endfor %}
+            {% if my_approvals %}{% include 'core/_approval_select.html' %}{% endif %}
             <button type="submit" class="btn btn-success w-100">Add to Stock</button>
           </form>
         </div>

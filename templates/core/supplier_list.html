@@ -1,0 +1,40 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm"><div class="card-body text-center">
+      <div class="text-muted small mb-1">Total owed to suppliers</div>
+      <div class="fs-4 fw-bold text-danger">{{ total_owed|floatformat:0|intcomma }} TZS</div>
+    </div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm"><div class="card-body text-center">
+      <div class="text-muted small mb-1">Overdue bills</div>
+      <div class="fs-4 fw-bold {% if overdue_count %}text-danger{% else %}text-success{% endif %}">{{ overdue_count }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-4 d-flex align-items-center gap-2">
+    <a href="{% url 'supplier_create' %}" class="btn btn-outline-primary"><i class="bi bi-plus-circle me-1"></i> Add supplier</a>
+    <a href="{% url 'bill_create' %}" class="btn btn-primary"><i class="bi bi-receipt me-1"></i> Record bill</a>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white border-bottom fw-semibold">Suppliers</div>
+  <table class="table table-hover mb-0">
+    <thead class="table-light"><tr><th>Supplier</th><th>Phone</th><th class="text-end">We owe (TZS)</th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><a href="{% url 'supplier_detail' r.supplier.id %}">{{ r.supplier.name }}</a></td>
+        <td>{{ r.supplier.phone|default:"—" }}</td>
+        <td class="text-end {% if r.owed > 0 %}text-danger fw-bold{% endif %}">{{ r.owed|floatformat:0|intcomma }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3" class="text-center text-muted py-4">No suppliers yet. Add one to start recording bills.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

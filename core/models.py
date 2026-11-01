@@ -201,8 +201,10 @@ class Expense(models.Model):
     PAYMENT_SOURCES = [
         ('cash', 'Cash'),
         ('bank_mobile', 'Bank / Mobile Money'),
+        ('credit', 'On Supplier Credit'),
     ]
     payment_source = models.CharField(max_length=20, choices=PAYMENT_SOURCES, default='cash')
+    is_stock_purchase = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.category} - {self.amount} TZS"
@@ -295,6 +297,12 @@ class SaleItem(models.Model):
     quantity = models.DecimalField(max_digits=12, decimal_places=2)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     total_price = models.DecimalField(max_digits=12, decimal_places=2)
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.unit_cost:
+            self.unit_cost = self.product.cost_price or 0
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.quantity} × {self.product.name}"
@@ -371,3 +379,124 @@ Truck.add_to_class('objects', BranchFilteredManager())
 Sale.add_to_class('objects', BranchFilteredManager())
 Customer.add_to_class('objects', BranchFilteredManager())
 InventoryLog.add_to_class('objects', BranchFilteredManager())
+
+class Payment(models.Model):
+    METHODS = [
+        ('cash', 'Cash'),
+        ('mobile_money', 'Mobile Money'),
+        ('bank_transfer', 'Bank Transfer'),
+    ]
+    KINDS = [
+        ('sale', 'Paid at time of sale'),
+        ('repayment', 'Customer repayment'),
+    ]
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='payments')
+    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments')
+    sale = models.ForeignKey(Sale, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    method = models.CharField(max_length=20, choices=METHODS, default='cash')
+    kind = models.CharField(max_length=20, choices=KINDS, default='sale')
+    payment_date = models.DateField(default=timezone.now)
+    notes = models.TextField(blank=True)
+    received_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.amount} TZS ({self.method}) on {self.payment_date}"
+
+    class Meta:
+        ordering = ['-payment_date', '-id']
+
+
+class AuditLog(models.Model):
+    user = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True)
+    action = models.CharField(max_length=20)
+    model_name = models.CharField(max_length=100)
+    object_id = models.CharField(max_length=50)
+    object_repr = models.CharField(max_length=255)
+    changes = models.JSONField(default=dict, blank=True)
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-created_at']
+
+class Supplier(models.Model):
+    name = models.CharField(max_length=200, unique=True)
+    phone = models.CharField(max_length=30, blank=True)
+    notes = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['name']
+
+
+class SupplierBill(models.Model):
+    supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name='bills')
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='supplier_bills')
+    bill_date = models.DateField(default=timezone.now)
+    due_date = models.DateField(null=True, blank=True)
+    reference = models.CharField(max_length=100, blank=True)
+    description = models.CharField(max_length=255)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    expense = models.ForeignKey(Expense, on_delete=models.SET_NULL, null=True, blank=True, related_name='supplier_bills')
+    created_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    @property
+    def balance(self):
+        return self.total_amount - self.amount_paid
+
+    @property
+    def is_overdue(self):
+        return bool(self.due_date and self.balance > 0 and self.due_date < timezone.now().date())
+
+    def __str__(self):
+        return f"{self.supplier.name} - {self.total_amount} TZS ({self.bill_date})"
+
+
+class SupplierPayment(models.Model):
+    METHODS = [
+        ('cash', 'Cash'),
+        ('mobile_money', 'Mobile Money'),
+        ('bank_transfer', 'Bank Transfer'),
+    ]
+    bill = models.ForeignKey(SupplierBill, on_delete=models.CASCADE, related_name='payments')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    method = models.CharField(max_length=20, choices=METHODS, default='cash')
+    payment_date = models.DateField(default=timezone.now)
+    notes = models.CharField(max_length=255, blank=True)
+    paid_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.amount} TZS to {self.bill.supplier.name}"
+
+    class Meta:
+        ordering = ['-payment_date', '-id']
+
+
+class SpendingRequest(models.Model):
+    STATUS = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('used', 'Used'),
+    ]
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True)
+    requested_by = models.ForeignKey('User', on_delete=models.CASCADE, related_name='spending_requests')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS, default='pending')
+    decided_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='decided_requests')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Request #{self.id}: {self.amount} TZS ({self.status})"

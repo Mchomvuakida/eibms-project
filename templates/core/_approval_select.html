@@ -1,0 +1,10 @@
+<div class="mb-3 p-3 border rounded bg-light">
+  <label class="form-label fw-bold">Approved spending request</label>
+  <select name="approval" class="form-select">
+    <option value="">— none —</option>
+    {% for a in my_approvals %}
+      <option value="{{ a.id }}">#{{ a.id }} — {{ a.amount|floatformat:0 }} TZS — {{ a.reason|truncatechars:50 }}</option>
+    {% endfor %}
+  </select>
+  <small class="text-muted">Only needed when the amount is above your spending limit.</small>
+</div>

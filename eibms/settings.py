@@ -71,6 +71,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'core.middleware.BranchIsolationMiddleware',
+    'core.audit.AuditMiddleware',
 ]
 
 ROOT_URLCONF = 'eibms.urls'
@@ -178,3 +179,5 @@ REST_FRAMEWORK = {
     ),
 }
 
+# Managers and clerks may spend up to this much without CEO approval
+SPENDING_LIMIT_TZS = config('SPENDING_LIMIT_TZS', default=1000000, cast=int)

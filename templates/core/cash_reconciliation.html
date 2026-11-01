@@ -27,8 +27,9 @@
     <div class="col-md-3">
       <div class="card border-0 shadow-sm h-100">
         <div class="card-body text-center">
-          <div class="text-muted small mb-1">{% trans "Cash Sales" %}</div>
+          <div class="text-muted small mb-1">Cash Received</div>
           <div class="fs-5 fw-bold text-primary">{{ cash_sales|floatformat:0|intcomma }}</div>
+          <div class="text-muted small">sales {{ cash_from_sales|floatformat:0|intcomma }} + repayments {{ cash_from_repayments|floatformat:0|intcomma }}</div>
         </div>
       </div>
     </div>
@@ -52,7 +53,7 @@
       <div class="card border-0 shadow-sm h-100 {% if expected_undeposited > 0 %}border-warning{% endif %}">
         <div class="card-body text-center">
           <div class="text-muted small mb-1">{% trans "Expected Undeposited Cash" %}</div>
-          <div class="fs-5 fw-bold {% if expected_undeposited > 0 %}text-warning{% else %}text-success{% endif %}">
+         <div class="fs-5 fw-bold {% if expected_undeposited > 0 %}text-warning{% elif expected_undeposited < 0 %}text-danger{% else %}text-success{% endif %}">
             {{ expected_undeposited|floatformat:0|intcomma }}
           </div>
         </div>
@@ -64,6 +65,13 @@
     <div class="alert alert-warning">
       <i class="bi bi-exclamation-triangle me-2"></i>
       {% blocktrans %}This much cash should still be on hand or on its way to the bank for this period. If a physical count shows less than this, that's the gap to investigate.{% endblocktrans %}
+    </div>
+  {% endif %}
+
+  {% if expected_undeposited < 0 %}
+    <div class="alert alert-danger">
+      <i class="bi bi-exclamation-octagon me-2"></i>
+      More was deposited than the cash recorded as received. Check for cash held from before EIBMS started, sales not yet entered, or a deposit entered with the wrong amount.
     </div>
   {% endif %}
 

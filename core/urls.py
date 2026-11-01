@@ -34,4 +34,13 @@ urlpatterns = [
     path('users/<int:user_id>/edit/', views.user_edit, name='user_edit'),
     path('deposits/new/', views.deposit_create, name='deposit_create'),
     path('reports/cash-reconciliation/', views.cash_reconciliation, name='cash_reconciliation'),
+    path('audit-log/', views.audit_log, name='audit_log'),
+    path('suppliers/', views.supplier_list, name='supplier_list'),
+    path('suppliers/new/', views.supplier_create, name='supplier_create'),
+    path('suppliers/<int:supplier_id>/', views.supplier_detail, name='supplier_detail'),
+    path('bills/new/', views.bill_create, name='bill_create'),
+    path('bills/<int:bill_id>/pay/', views.bill_pay, name='bill_pay'),
+    path('spending-requests/', views.request_list, name='request_list'),
+    path('spending-requests/new/', views.request_create, name='request_create'),
+    path('spending-requests/<int:request_id>/decide/', views.request_decide, name='request_decide'),
 ]

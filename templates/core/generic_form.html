@@ -1,0 +1,25 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card shadow-lg border-0">
+  <div class="card-header bg-primary text-white"><h5 class="mb-0">{{ title }}</h5></div>
+  <div class="card-body">
+    {% if intro %}<p class="text-muted">{{ intro }}</p>{% endif %}
+    <form method="post">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% for field in form %}
+        <div class="mb-3">
+          <label for="{{ field.id_for_label }}" class="form-label fw-bold">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+        </div>
+      {% endfor %}
+      {% if my_approvals %}{% include 'core/_approval_select.html' %}{% endif %}
+      <div class="d-flex gap-3 mt-4">
+        <button type="submit" class="btn btn-success btn-lg">{{ submit_label|default:"Save" }}</button>
+        <a href="{{ cancel_url }}" class="btn btn-outline-secondary btn-lg">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

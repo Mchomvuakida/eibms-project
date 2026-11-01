@@ -2,7 +2,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Sum, F, Min, Q
+from django.db.models import Sum, F, Min, Q, ExpressionWrapper, DecimalField
 from django.db.models.functions import TruncMonth, Coalesce
 from django.db import transaction
 from django.http import HttpResponse
@@ -11,6 +11,8 @@ from django.utils import timezone
 from django import forms
 from datetime import timedelta, datetime, date
 from decimal import Decimal
+from django.conf import settings
+from django.urls import reverse
 from functools import wraps
 from django.http import HttpResponse
 from reportlab.lib.pagesizes import A4
@@ -18,6 +20,7 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from django.utils.dateparse import parse_date
 import csv
 import pandas as pd
 
@@ -27,11 +30,12 @@ from rest_framework.response import Response
 
 from .models import (
     Expense, Branch, Production, Product, Sale,
-    Customer, Truck, TripLog, InventoryLog, User, BankDeposit
+    Customer, Truck, TripLog, InventoryLog, User, BankDeposit,     SaleItem, EXPENSE_CATEGORIES, Payment, AuditLog,
+    Supplier, SupplierBill, SupplierPayment, SpendingRequest
 )
 from .forms import (
     ExpenseForm, ProductionForm, SaleForm,
-    SaleItemFormSet, TripLogForm, StockPurchaseForm, BankDepositForm
+    SaleItemFormSet, TripLogForm, StockPurchaseForm, BankDepositForm, SupplierForm, SupplierBillForm, BillPayForm, SpendingRequestForm
 )
 
 
@@ -52,6 +56,37 @@ def role_required(*roles):
         return wrapped
     return decorator
 
+@role_required('admin', 'owner')
+def audit_log(request):
+    logs = AuditLog.objects.select_related('user', 'branch')
+
+    model = request.GET.get('model', '')
+    action = request.GET.get('action', '')
+    user_id = request.GET.get('user', '')
+    date_from = parse_date(request.GET.get('from', '') or '')
+    date_to = parse_date(request.GET.get('to', '') or '')
+
+    if model:
+        logs = logs.filter(model_name=model)
+    if action:
+        logs = logs.filter(action=action)
+    if user_id.isdigit():
+        logs = logs.filter(user_id=int(user_id))
+    if date_from:
+        logs = logs.filter(created_at__date__gte=date_from)
+    if date_to:
+        logs = logs.filter(created_at__date__lte=date_to)
+
+    return render(request, 'core/audit_log.html', {
+        'title': 'Audit Log',
+        'logs': logs[:300],
+        'models': AuditLog.objects.order_by('model_name').values_list(
+            'model_name', flat=True).distinct(),
+        'users': User.objects.order_by('username'),
+        'f_model': model, 'f_action': action, 'f_user': user_id,
+        'f_from': request.GET.get('from', ''), 'f_to': request.GET.get('to', ''),
+    })
+
 
 def get_branch_filter(user):
     """Return branch to filter by, or None if user sees all branches."""
@@ -59,7 +94,46 @@ def get_branch_filter(user):
         return None
     return user.branch
 
+def approved_for(user):
+    return SpendingRequest.objects.filter(requested_by=user, status='approved').order_by('-created_at')
 
+
+def spending_check(user, amount, approval_id):
+    """Returns (approval_or_None, error_message_or_None)."""
+    if user.role in ('admin', 'owner') or not amount:
+        return None, None
+    limit = Decimal(str(getattr(settings, 'SPENDING_LIMIT_TZS', 300000)))
+    if amount <= limit:
+        return None, None
+    if not approval_id or not str(approval_id).isdigit():
+        return None, (f'This is above your spending limit of TZS {limit:,.0f}. '
+                      'Ask the CEO to approve it first under Spending Requests, '
+                      'then choose the approval on this form.')
+    approval = SpendingRequest.objects.filter(
+        id=int(approval_id), status='approved', requested_by=user).first()
+    if not approval:
+        return None, 'That approval is not valid, or it was already used.'
+    if amount > approval.amount:
+        return None, f'That approval only covers TZS {approval.amount:,.0f}.'
+    return approval, None
+
+
+def create_supplier_bill(*, supplier, branch, amount, bill_date, description,
+                         reference='', due_date=None, paid_now=Decimal('0'),
+                         method='cash', user=None, expense=None):
+    bill = SupplierBill.objects.create(
+        supplier=supplier, branch=branch, bill_date=bill_date, due_date=due_date,
+        reference=reference, description=description[:255], total_amount=amount,
+        amount_paid=paid_now or 0, expense=expense, created_by=user,
+    )
+    if paid_now and paid_now > 0:
+        SupplierPayment.objects.create(
+            bill=bill, amount=paid_now, method=method or 'cash',
+            payment_date=bill_date, notes='Paid when the goods were received', paid_by=user,
+        )
+    return bill
+
+@role_required('admin', 'owner', 'branch_manager')
 @login_required
 def deposit_create(request):
     if request.method == 'POST':
@@ -80,7 +154,7 @@ def deposit_create(request):
         'title': 'Log Bank Deposit',
     })
 
-
+@role_required('admin', 'owner', 'branch_manager')
 @login_required
 def cash_reconciliation(request):
     branch = get_branch_filter(request.user)
@@ -95,27 +169,34 @@ def cash_reconciliation(request):
         start_date = today.replace(day=1)
         end_date = today
 
-    sales_qs = Sale.objects.filter(
-        payment_method='cash', sale_date__gte=start_date, sale_date__lte=end_date
-    )
+    payments_qs = Payment.objects.filter(
+        method='cash', payment_date__gte=start_date, payment_date__lte=end_date)
     expenses_qs = Expense.objects.filter(
-        payment_source='cash', date__gte=start_date, date__lte=end_date
-    )
+        payment_source='cash', date__gte=start_date, date__lte=end_date)
     deposits_qs = BankDeposit.objects.filter(
-        deposit_date__gte=start_date, deposit_date__lte=end_date
-    )
+        deposit_date__gte=start_date, deposit_date__lte=end_date)
 
     if branch:
-        sales_qs = sales_qs.filter(branch=branch)
+        payments_qs = payments_qs.filter(branch=branch)
         expenses_qs = expenses_qs.filter(branch=branch)
         deposits_qs = deposits_qs.filter(branch=branch)
 
-    cash_sales = sales_qs.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
-    cash_expenses = expenses_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    cash_from_sales = payments_qs.filter(kind='sale').aggregate(
+        total=Sum('amount'))['total'] or Decimal('0')
+    cash_from_repayments = payments_qs.filter(kind='repayment').aggregate(
+        total=Sum('amount'))['total'] or Decimal('0')
+    cash_sales = cash_from_sales + cash_from_repayments
+    supplier_paid_qs = SupplierPayment.objects.filter(
+        method='cash', payment_date__gte=start_date, payment_date__lte=end_date)
+    if branch:
+        supplier_paid_qs = supplier_paid_qs.filter(bill__branch=branch)
+    cash_expenses = (
+        (expenses_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0'))
+        + (supplier_paid_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0'))
+    )
     total_deposits = deposits_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
     expected_undeposited = cash_sales - cash_expenses - total_deposits
-
     recent_deposits = deposits_qs.select_related('branch', 'logged_by').order_by('-deposit_date')[:20]
 
     return render(request, 'core/cash_reconciliation.html', {
@@ -124,12 +205,13 @@ def cash_reconciliation(request):
         'start_date': start_date,
         'end_date': end_date,
         'cash_sales': cash_sales,
+        'cash_from_sales': cash_from_sales,
+        'cash_from_repayments': cash_from_repayments,
         'cash_expenses': cash_expenses,
         'total_deposits': total_deposits,
         'expected_undeposited': expected_undeposited,
         'recent_deposits': recent_deposits,
     })
-
 
 # ─── Home / Dashboard ────────────────────────────────────────────────────────
 
@@ -144,7 +226,7 @@ def home(request):
 @login_required
 def clerk_dashboard(request):
     """Simple task-focused dashboard for clerks."""
-    today = timezone.now().date()
+    today = timezone.localdate()
     branch = request.user.branch
 
     today_sales = Sale.objects.filter(
@@ -175,7 +257,7 @@ def clerk_dashboard(request):
         'today': today,
     })
 
-
+@role_required('admin', 'owner', 'branch_manager')
 @login_required
 def main_dashboard(request):
     """Full dashboard for admin, owner, branch_manager."""
@@ -337,6 +419,15 @@ def sale_create(request):
                     sale.created_by = request.user
                     sale.save()
 
+                    if sale.amount_paid > 0:
+                        pay_method = sale.payment_method if sale.payment_method in (
+                            'cash', 'mobile_money', 'bank_transfer') else 'cash'
+                        Payment.objects.create(
+                            branch=sale.branch, customer=sale.customer, sale=sale,
+                            amount=sale.amount_paid, method=pay_method, kind='sale',
+                            payment_date=sale.sale_date, received_by=request.user,
+                        )
+                    
                     balance_due = sale.total_amount - sale.amount_paid
                     if balance_due > 0 and sale.customer:
                         sale.customer.balance_owed += balance_due
@@ -369,9 +460,11 @@ def sale_list(request):
     sales = Sale.objects.all().order_by('-sale_date')
     if branch:
         sales = sales.filter(branch=branch)
+    if request.user.role == 'clerk':
+        sales = sales.filter(sale_date=timezone.localdate())
     return render(request, 'core/sale_list.html', {
         'sales': sales,
-        'title': 'Sales Records',
+        'title': "Today's Sales" if request.user.role == 'clerk' else 'Sales Records',
     })
 
 
@@ -380,6 +473,8 @@ def sale_detail(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
     if request.user.role not in ['admin', 'owner'] and sale.branch != request.user.branch:
         raise PermissionDenied('You do not have access to this sale.')
+    if request.user.role == 'clerk' and sale.sale_date != timezone.localdate():
+        raise PermissionDenied('Clerks can only open sales from today.')
     items = sale.items.all()
     balance_due = sale.total_amount - sale.amount_paid
     return render(request, 'core/sale_detail.html', {
@@ -394,6 +489,8 @@ def sale_invoice_pdf(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
     if request.user.role not in ['admin', 'owner'] and sale.branch != request.user.branch:
         raise PermissionDenied('You do not have access to this sale.')
+    if request.user.role == 'clerk' and sale.sale_date != timezone.localdate():
+        raise PermissionDenied('Clerks can only open sales from today.')
 
     items = sale.items.all()
 
@@ -581,6 +678,16 @@ def customer_repayment(request, customer_id):
                 customer.balance_owed -= amount
                 customer.save()
 
+                repay_method = payment_method.strip().lower().replace(' ', '_')
+                if repay_method not in ('cash', 'mobile_money', 'bank_transfer'):
+                    repay_method = 'cash'
+                Payment.objects.create(
+                    branch=customer.branch, customer=customer, amount=amount,
+                    method=repay_method, kind='repayment',
+                    payment_date=timezone.now().date(), notes=notes,
+                    received_by=request.user,
+                )
+
                 messages.success(
                     request,
                     f'Repayment of {amount:,.0f} TZS recorded for {customer.name}. '
@@ -597,9 +704,96 @@ def customer_repayment(request, customer_id):
 
 
 # ─── Inventory & Production ──────────────────────────────────────────────────
-
 @login_required
 def stock_purchase(request):
+    branch_scope = get_branch_filter(request.user)
+    if request.method == 'POST':
+        form = StockPurchaseForm(request.POST, user=request.user)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    cd = form.cleaned_data
+                    product = cd['product']
+                    quantity = cd['quantity']
+                    cost_per_unit = cd.get('cost_per_unit')
+                    supplier_obj = cd.get('supplier')
+                    supplier_label = (supplier_obj.name if supplier_obj
+                                      else (cd.get('supplier_name') or 'Unknown'))
+                    date = cd['date']
+                    notes = cd.get('notes', '')
+                    paid_now = cd.get('amount_paid_now') or Decimal('0')
+                    total_cost = (cost_per_unit * quantity) if cost_per_unit else Decimal('0')
+
+                    if supplier_obj and not cost_per_unit:
+                        raise ValidationError('Enter the cost per unit to record a supplier bill.')
+                    if supplier_obj and paid_now > total_cost:
+                        raise ValidationError('Paid now cannot be more than the total cost.')
+
+                    approval, limit_error = spending_check(
+                        request.user, total_cost, request.POST.get('approval'))
+                    if limit_error:
+                        raise ValidationError(limit_error)
+
+                    stock_before = product.current_stock
+                    Product.objects.filter(id=product.id).update(
+                        current_stock=F('current_stock') + quantity)
+                    if cost_per_unit:
+                        Product.objects.filter(id=product.id).update(cost_price=cost_per_unit)
+
+                    InventoryLog.objects.create(
+                        product=product, branch=product.branch, movement_type='purchase',
+                        quantity=quantity, stock_before=stock_before,
+                        stock_after=stock_before + quantity,
+                        reference_note=f'Purchase from {supplier_label}',
+                        created_by=request.user,
+                    )
+
+                    if cost_per_unit:
+                        description = (f'Purchase: {quantity} {product.unit} of '
+                                       f'{product.name} from {supplier_label}. {notes}')
+                        expense = Expense.objects.create(
+                            branch=product.branch, category='raw_materials',
+                            amount=total_cost, description=description, date=date,
+                            is_stock_purchase=True,
+                            payment_source='credit' if supplier_obj else 'cash',
+                        )
+                        if supplier_obj:
+                            create_supplier_bill(
+                                supplier=supplier_obj, branch=product.branch,
+                                amount=total_cost, bill_date=date, description=description,
+                                due_date=cd.get('due_date'), paid_now=paid_now,
+                                method=cd.get('payment_method') or 'cash',
+                                user=request.user, expense=expense,
+                            )
+
+                    if approval:
+                        approval.status = 'used'
+                        approval.save()
+
+                    messages.success(request, f'Stock updated! {quantity} {product.unit} of {product.name} added.')
+                    return redirect('stock_purchase')
+            except ValidationError as e:
+                messages.error(request, e.messages[0])
+            except Exception as e:
+                messages.error(request, f'Error: {str(e)}')
+    else:
+        form = StockPurchaseForm(user=request.user)
+
+    recent_logs = InventoryLog.objects.filter(
+        movement_type='purchase'
+    ).select_related('product', 'branch').order_by('-created_at')
+    if branch_scope:
+        recent_logs = recent_logs.filter(branch=branch_scope)
+
+    return render(request, 'core/stock_purchase.html', {
+        'form': form,
+        'recent_logs': recent_logs[:20],
+        'my_approvals': approved_for(request.user),
+        'title': 'Stock Purchase / Intake',
+    })
+
+@login_required
+def stock_purchase_old(request):
     if request.method == 'POST':
         form = StockPurchaseForm(request.POST, user=request.user)
         if form.is_valid():
@@ -634,6 +828,7 @@ def stock_purchase(request):
                         Expense.objects.create(
                         branch=product.branch,
                         category='raw_materials',
+                        is_stock_purchase=True,
                         amount=cost_per_unit * quantity,
                         description=f'Purchase: {quantity} {product.unit} of {product.name} from {supplier}. {notes}',
                         date=date,
@@ -667,6 +862,8 @@ def production_list(request):
     productions = Production.objects.all().order_by('-production_date')
     if branch:
         productions = productions.filter(branch=branch)
+    if request.user.role == 'clerk':
+        productions = productions.filter(production_date=timezone.localdate())
     return render(request, 'core/production_list.html', {
         'productions': productions,
         'title': 'Production Records',
@@ -756,8 +953,12 @@ def expense_list(request):
     if branch:
         expenses = expenses.filter(branch=branch)
 
-    today = timezone.now().date()
+    today = timezone.localdate()
+    is_clerk = request.user.role == 'clerk'
+    if is_clerk:
+        expenses = expenses.filter(date=today)
     return render(request, 'core/expense_list.html', {
+        'is_clerk': is_clerk,
         'expenses': expenses,
         'title': 'Expenses',
         'total_all': expenses.aggregate(total=Sum('amount'))['total'] or 0,
@@ -766,9 +967,53 @@ def expense_list(request):
         'total_week': expenses.filter(date__gte=today - timedelta(days=7)).aggregate(total=Sum('amount'))['total'] or 0,
     })
 
-
 @login_required
 def expense_create(request):
+    if request.method == 'POST':
+        form = ExpenseForm(request.POST, request.FILES)
+        if form.is_valid():
+            expense = form.save(commit=False)
+            error = None
+            if request.user.role in ['admin', 'owner']:
+                if not expense.branch:
+                    error = 'Please select a branch.'
+            else:
+                if not request.user.branch:
+                    error = 'Your account has no branch assigned.'
+                else:
+                    expense.branch = request.user.branch
+
+            approval = None
+            if not error:
+                approval, error = spending_check(
+                    request.user, expense.amount, request.POST.get('approval'))
+
+            if error:
+                messages.error(request, error)
+            else:
+                expense.save()
+                if approval:
+                    approval.status = 'used'
+                    approval.save()
+                messages.success(request, 'Expense added successfully!')
+                return redirect('expense_list')
+    else:
+        form = ExpenseForm()
+
+    if request.user.role not in ['admin', 'owner'] and request.user.branch:
+        form.fields['branch'].queryset = Branch.objects.filter(id=request.user.branch.id)
+        form.fields['branch'].initial = request.user.branch
+        form.fields['branch'].widget.attrs['readonly'] = True
+        form.fields['branch'].required = False
+
+    return render(request, 'core/expense_form.html', {
+        'form': form,
+        'my_approvals': approved_for(request.user),
+        'title': 'Add New Expense',
+    })
+
+@login_required
+def expense_create_old(request):
     if request.method == 'POST':
         form = ExpenseForm(request.POST, request.FILES)
         if form.is_valid():
@@ -801,7 +1046,7 @@ def expense_create(request):
 
 
 # ─── Fleet ───────────────────────────────────────────────────────────────────
-
+@role_required('admin', 'owner', 'branch_manager')
 @login_required
 def truck_list(request):
     branch = get_branch_filter(request.user)
@@ -813,7 +1058,7 @@ def truck_list(request):
         'title': 'Trucks Overview',
     })
 
-
+@role_required('admin', 'owner', 'branch_manager')
 @login_required
 def truck_profitability(request, truck_id=None):
     branch = get_branch_filter(request.user)
@@ -862,7 +1107,7 @@ def truck_profitability(request, truck_id=None):
         'title': 'Truck Profitability',
     })
 
-
+@role_required('admin', 'owner', 'branch_manager')
 @login_required
 def trip_create(request):
     initial = {}
@@ -972,9 +1217,131 @@ def tra_expense_report(request):
         'branch': branch, 'title': f'TRA Expense Report — {year}',
     })
 
-
 @role_required('admin', 'owner', 'branch_manager')
 def profit_and_loss(request):
+    year = int(request.GET.get('year', timezone.now().year))
+    month = request.GET.get('month', '')
+    export = request.GET.get('export')
+    branch = get_branch_filter(request.user)
+
+    sales_qs = Sale.objects.filter(sale_date__year=year)
+    items_qs = SaleItem.objects.filter(sale__sale_date__year=year)
+    expenses_qs = Expense.objects.filter(date__year=year)
+    if month:
+        sales_qs = sales_qs.filter(sale_date__month=month)
+        items_qs = items_qs.filter(sale__sale_date__month=month)
+        expenses_qs = expenses_qs.filter(date__month=month)
+    if branch:
+        sales_qs = sales_qs.filter(branch=branch)
+        items_qs = items_qs.filter(sale__branch=branch)
+        expenses_qs = expenses_qs.filter(branch=branch)
+
+    running_qs = expenses_qs.filter(is_stock_purchase=False)
+    purchases_qs = expenses_qs.filter(is_stock_purchase=True)
+
+    months_map = {
+        1: 'January', 2: 'February', 3: 'March', 4: 'April',
+        5: 'May', 6: 'June', 7: 'July', 8: 'August',
+        9: 'September', 10: 'October', 11: 'November', 12: 'December'
+    }
+
+    cost_expr = ExpressionWrapper(
+        F('quantity') * F('unit_cost'),
+        output_field=DecimalField(max_digits=18, decimal_places=2))
+
+    data = {}
+
+    def bucket(m):
+        return data.setdefault(m, {
+            'revenue': 0.0, 'collected': 0.0, 'cogs': 0.0, 'running': 0.0, 'purchases': 0.0})
+
+    for r in sales_qs.order_by().values('sale_date__month').annotate(
+            rev=Sum('total_amount'), col=Sum('amount_paid')):
+        b = bucket(r['sale_date__month'])
+        b['revenue'] = float(r['rev'] or 0)
+        b['collected'] = float(r['col'] or 0)
+    for r in items_qs.order_by().values('sale__sale_date__month').annotate(c=Sum(cost_expr)):
+        bucket(r['sale__sale_date__month'])['cogs'] = float(r['c'] or 0)
+    for r in running_qs.order_by().values('date__month').annotate(t=Sum('amount')):
+        bucket(r['date__month'])['running'] = float(r['t'] or 0)
+    for r in purchases_qs.order_by().values('date__month').annotate(t=Sum('amount')):
+        bucket(r['date__month'])['purchases'] = float(r['t'] or 0)
+
+    pl_table = []
+    for m in sorted(data):
+        d = data[m]
+        gross = d['revenue'] - d['cogs']
+        net = gross - d['running']
+        pl_table.append({
+            'month': months_map.get(m, '—'),
+            'revenue': d['revenue'], 'collected': d['collected'],
+            'outstanding': d['revenue'] - d['collected'],
+            'cogs': d['cogs'], 'gross_profit': gross,
+            'running': d['running'], 'net_profit': net,
+            'purchases': d['purchases'],
+            'margin': round(net / d['revenue'] * 100, 1) if d['revenue'] > 0 else 0,
+        })
+
+    def total(key):
+        return sum(r[key] for r in pl_table)
+
+    total_revenue = total('revenue')
+    total_collected = total('collected')
+    total_outstanding = total_revenue - total_collected
+    total_cogs = total('cogs')
+    total_gross = total_revenue - total_cogs
+    total_running = total('running')
+    total_net = total_gross - total_running
+    total_purchases = total('purchases')
+    gross_margin = round(total_gross / total_revenue * 100, 1) if total_revenue > 0 else 0
+    overall_margin = round(total_net / total_revenue * 100, 1) if total_revenue > 0 else 0
+
+    stock_products = Product.objects.filter(is_active=True, track_stock=True)
+    if branch:
+        stock_products = stock_products.filter(branch=branch)
+    stock_value = stock_products.aggregate(v=Sum(ExpressionWrapper(
+        F('current_stock') * F('cost_price'),
+        output_field=DecimalField(max_digits=18, decimal_places=2))))['v'] or 0
+    products_missing_cost = stock_products.filter(current_stock__gt=0).filter(
+        Q(cost_price__isnull=True) | Q(cost_price=0)).count()
+    zero_cost_lines = items_qs.filter(unit_cost=0, product__track_stock=True).count()
+
+    labels = {key: label.split(' (')[0] for key, label in EXPENSE_CATEGORIES}
+    category_breakdown = [
+        {'label': labels.get(r['category'], r['category']), 'total': float(r['total'])}
+        for r in running_qs.order_by().values('category').annotate(total=Sum('amount')).order_by('-total')
+    ]
+
+    if export == 'csv':
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="PL_Report_{year}.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['ES & RI Enterprises — Profit & Loss', f'Year: {year}'])
+        writer.writerow(['Month', 'Revenue', 'Cost of Goods Sold', 'Gross Profit',
+                         'Running Costs', 'Net Profit', 'Margin %', 'Stock Bought (not a cost)'])
+        for row in pl_table:
+            writer.writerow([row['month'], row['revenue'], row['cogs'], row['gross_profit'],
+                             row['running'], row['net_profit'], row['margin'], row['purchases']])
+        writer.writerow(['TOTALS', total_revenue, total_cogs, total_gross,
+                         total_running, total_net, overall_margin, total_purchases])
+        return response
+
+    return render(request, 'core/profit_and_loss.html', {
+        'year': year, 'month': month, 'pl_table': pl_table,
+        'total_revenue': total_revenue, 'total_collected': total_collected,
+        'total_outstanding': total_outstanding, 'total_cogs': total_cogs,
+        'total_gross': total_gross, 'total_running': total_running,
+        'total_net': total_net, 'total_purchases': total_purchases,
+        'gross_margin': gross_margin, 'overall_margin': overall_margin,
+        'stock_value': stock_value, 'products_missing_cost': products_missing_cost,
+        'zero_cost_lines': zero_cost_lines, 'category_breakdown': category_breakdown,
+        'branch': branch, 'title': f'Profit & Loss — {year}',
+        'years': range(2024, timezone.now().year + 1),
+        'months_map': months_map, 'selected_month': month,
+    })
+
+@role_required('admin', 'owner', 'branch_manager')
+def profit_and_loss_old(request):
     year = int(request.GET.get('year', timezone.now().year))
     month = request.GET.get('month', '')
     export = request.GET.get('export')
@@ -1083,6 +1450,8 @@ def profit_and_loss(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_dashboard_summary(request):
+    if request.user.role == 'clerk':
+        return Response({'detail': 'Not allowed.'}, status=403)
     today = timezone.now().date()
     branch = get_branch_filter(request.user)
 
@@ -1131,6 +1500,8 @@ def api_dashboard_summary(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_stock_status(request):
+    if request.user.role == 'clerk':
+        return Response({'detail': 'Not allowed.'}, status=403)
     branch = get_branch_filter(request.user)
     products = Product.objects.filter(is_active=True)
     if branch:
@@ -1364,3 +1735,200 @@ def cash_flow_report(request):
         'selected_year': year,
         'selected_branch': branch,
     })
+
+# ─── Suppliers and credit ────────────────────────────────────────────────────
+
+@role_required('admin', 'owner', 'branch_manager')
+def supplier_list(request):
+    branch = get_branch_filter(request.user)
+    bills = SupplierBill.objects.all()
+    if branch:
+        bills = bills.filter(branch=branch)
+
+    owed = {r['supplier_id']: r['owed'] for r in
+            bills.order_by().values('supplier_id').annotate(
+                owed=Sum(F('total_amount') - F('amount_paid')))}
+    rows = [{'supplier': s, 'owed': owed.get(s.id) or Decimal('0')}
+            for s in Supplier.objects.filter(is_active=True)]
+    rows.sort(key=lambda r: -r['owed'])
+
+    today = timezone.now().date()
+    overdue_count = bills.filter(due_date__lt=today, amount_paid__lt=F('total_amount')).count()
+
+    return render(request, 'core/supplier_list.html', {
+        'title': 'Suppliers',
+        'rows': rows,
+        'total_owed': sum((r['owed'] for r in rows), Decimal('0')),
+        'overdue_count': overdue_count,
+    })
+
+
+@role_required('admin', 'owner', 'branch_manager')
+def supplier_create(request):
+    form = SupplierForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Supplier added.')
+        return redirect('supplier_list')
+    return render(request, 'core/generic_form.html', {
+        'form': form, 'title': 'Add Supplier', 'submit_label': 'Save supplier',
+        'cancel_url': reverse('supplier_list'),
+    })
+
+
+@role_required('admin', 'owner', 'branch_manager')
+def supplier_detail(request, supplier_id):
+    supplier = get_object_or_404(Supplier, id=supplier_id)
+    branch = get_branch_filter(request.user)
+    bills = supplier.bills.select_related('branch').order_by('-bill_date')
+    if branch:
+        bills = bills.filter(branch=branch)
+    payments = SupplierPayment.objects.filter(bill__in=bills).select_related(
+        'bill', 'paid_by').order_by('-payment_date')[:50]
+    return render(request, 'core/supplier_detail.html', {
+        'title': supplier.name,
+        'supplier': supplier,
+        'bills': bills,
+        'payments': payments,
+        'total_owed': sum((b.balance for b in bills), Decimal('0')),
+        'can_pay': request.user.role in ('admin', 'owner'),
+    })
+
+
+@role_required('admin', 'owner', 'branch_manager')
+def bill_create(request):
+    if request.method == 'POST':
+        form = SupplierBillForm(request.POST)
+        if form.is_valid():
+            cd = form.cleaned_data
+            branch = cd.get('branch') if request.user.role in ('admin', 'owner') else request.user.branch
+            amount = cd['amount']
+            paid_now = cd.get('amount_paid_now') or Decimal('0')
+
+            error = None
+            if not branch:
+                error = 'Choose a branch.'
+            elif paid_now > amount:
+                error = 'Paid now cannot be more than the bill amount.'
+            approval = None
+            if not error:
+                approval, error = spending_check(request.user, amount, request.POST.get('approval'))
+
+            if error:
+                messages.error(request, error)
+            else:
+                with transaction.atomic():
+                    expense = Expense.objects.create(
+                        branch=branch, truck=cd.get('truck'), category=cd['category'],
+                        amount=amount, description=cd['description'],
+                        date=cd['bill_date'], payment_source='credit',
+                    )
+                    create_supplier_bill(
+                        supplier=cd['supplier'], branch=branch, amount=amount,
+                        bill_date=cd['bill_date'], description=cd['description'],
+                        reference=cd.get('reference') or '', due_date=cd.get('due_date'),
+                        paid_now=paid_now, method=cd.get('payment_method') or 'cash',
+                        user=request.user, expense=expense,
+                    )
+                    if approval:
+                        approval.status = 'used'
+                        approval.save()
+                messages.success(request, 'Bill recorded.')
+                return redirect('supplier_detail', supplier_id=cd['supplier'].id)
+    else:
+        form = SupplierBillForm(initial={'bill_date': timezone.now().date(), 'payment_method': 'cash'})
+
+    return render(request, 'core/generic_form.html', {
+        'form': form, 'title': 'Record a Bill from a Supplier',
+        'intro': 'Use this for goods or services taken on credit that are not stock '
+                 '(fuel, sand delivered straight to a customer, repairs). For stock, use Stock Purchase.',
+        'submit_label': 'Save bill',
+        'cancel_url': reverse('supplier_list'),
+        'my_approvals': approved_for(request.user),
+    })
+
+
+@role_required('admin', 'owner')
+def bill_pay(request, bill_id):
+    bill = get_object_or_404(SupplierBill, id=bill_id)
+    if request.method == 'POST':
+        form = BillPayForm(request.POST)
+        if form.is_valid():
+            amount = form.cleaned_data['amount']
+            if amount > bill.balance:
+                form.add_error('amount', f'Only TZS {bill.balance:,.0f} is still owed on this bill.')
+            else:
+                with transaction.atomic():
+                    SupplierPayment.objects.create(
+                        bill=bill, amount=amount, method=form.cleaned_data['method'],
+                        payment_date=form.cleaned_data['payment_date'],
+                        notes=form.cleaned_data.get('notes', ''), paid_by=request.user,
+                    )
+                    SupplierBill.objects.filter(id=bill.id).update(
+                        amount_paid=F('amount_paid') + amount)
+                messages.success(request, 'Payment recorded.')
+                return redirect('supplier_detail', supplier_id=bill.supplier_id)
+    else:
+        form = BillPayForm(initial={
+            'amount': bill.balance, 'method': 'cash',
+            'payment_date': timezone.now().date()})
+
+    return render(request, 'core/generic_form.html', {
+        'form': form,
+        'title': f'Pay {bill.supplier.name}',
+        'intro': f'{bill.description} — total {bill.total_amount:,.0f} TZS, '
+                 f'paid {bill.amount_paid:,.0f}, still owed {bill.balance:,.0f}.',
+        'submit_label': 'Record payment',
+        'cancel_url': reverse('supplier_detail', args=[bill.supplier_id]),
+    })
+
+
+# ─── Spending requests ───────────────────────────────────────────────────────
+
+@login_required
+def request_list(request):
+    qs = SpendingRequest.objects.select_related('requested_by', 'branch', 'decided_by')
+    is_boss = request.user.role in ('admin', 'owner')
+    if not is_boss:
+        qs = qs.filter(requested_by=request.user)
+    return render(request, 'core/request_list.html', {
+        'title': 'Spending Requests',
+        'pending': qs.filter(status='pending').order_by('created_at'),
+        'history': qs.exclude(status='pending').order_by('-created_at')[:50],
+        'can_decide': is_boss,
+        'limit': getattr(settings, 'SPENDING_LIMIT_TZS', 300000),
+    })
+
+
+@login_required
+def request_create(request):
+    form = SpendingRequestForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        req = form.save(commit=False)
+        req.requested_by = request.user
+        req.branch = request.user.branch
+        req.save()
+        messages.success(request, 'Request sent to the CEO.')
+        return redirect('request_list')
+    return render(request, 'core/generic_form.html', {
+        'form': form, 'title': 'Request Spending Approval',
+        'intro': 'Ask before you spend more than your limit. Once approved, choose it on the expense, '
+                 'purchase or bill form.',
+        'submit_label': 'Send request',
+        'cancel_url': reverse('request_list'),
+    })
+
+
+@role_required('admin', 'owner')
+def request_decide(request, request_id):
+    req = get_object_or_404(SpendingRequest, id=request_id, status='pending')
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action in ('approve', 'reject'):
+            req.status = 'approved' if action == 'approve' else 'rejected'
+            req.decided_by = request.user
+            req.decided_at = timezone.now()
+            req.decision_note = request.POST.get('note', '')
+            req.save()
+            messages.success(request, f'Request {req.status}.')
+    return redirect('request_list')

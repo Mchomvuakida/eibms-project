@@ -1,0 +1,68 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0">{{ supplier.name }}</h4>
+    <div class="text-muted small">{{ supplier.phone|default:"" }}</div>
+  </div>
+  <div class="text-end">
+    <div class="text-muted small">Currently owed</div>
+    <div class="fs-4 fw-bold {% if total_owed > 0 %}text-danger{% else %}text-success{% endif %}">{{ total_owed|floatformat:0|intcomma }} TZS</div>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white border-bottom fw-semibold">Bills</div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr><th>Date</th><th>Branch</th><th>Details</th><th class="text-end">Total</th><th class="text-end">Paid</th><th class="text-end">Owed</th><th>Due</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for b in bills %}
+        <tr>
+          <td>{{ b.bill_date|date:"d M Y" }}</td>
+          <td>{{ b.branch.name }}</td>
+          <td class="small">{{ b.reference|default:"" }} {{ b.description|truncatechars:60 }}</td>
+          <td class="text-end">{{ b.total_amount|floatformat:0|intcomma }}</td>
+          <td class="text-end">{{ b.amount_paid|floatformat:0|intcomma }}</td>
+          <td class="text-end fw-bold {% if b.balance > 0 %}text-danger{% endif %}">{{ b.balance|floatformat:0|intcomma }}</td>
+          <td>
+            {% if b.due_date %}{{ b.due_date|date:"d M Y" }}{% else %}—{% endif %}
+            {% if b.is_overdue %}<span class="badge bg-danger">overdue</span>{% endif %}
+          </td>
+          <td>
+            {% if can_pay and b.balance > 0 %}
+              <a href="{% url 'bill_pay' b.id %}" class="btn btn-sm btn-success">Pay</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-center text-muted py-4">No bills yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white border-bottom fw-semibold">Payments made</div>
+  <table class="table table-sm mb-0">
+    <thead class="table-light"><tr><th>Date</th><th class="text-end">Amount</th><th>Method</th><th>By</th><th>Note</th></tr></thead>
+    <tbody>
+      {% for p in payments %}
+      <tr>
+        <td>{{ p.payment_date|date:"d M Y" }}</td>
+        <td class="text-end">{{ p.amount|floatformat:0|intcomma }}</td>
+        <td>{{ p.get_method_display }}</td>
+        <td>{{ p.paid_by.username|default:"—" }}</td>
+        <td class="small text-muted">{{ p.notes }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="text-center text-muted py-3">No payments yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

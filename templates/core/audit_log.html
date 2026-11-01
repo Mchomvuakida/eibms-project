@@ -1,0 +1,77 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Record type</label>
+        <select name="model" class="form-select">
+          <option value="">All</option>
+          {% for m in models %}<option value="{{ m }}" {% if m == f_model %}selected{% endif %}>{{ m }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Action</label>
+        <select name="action" class="form-select">
+          <option value="">All</option>
+          <option value="created" {% if f_action == 'created' %}selected{% endif %}>Created</option>
+          <option value="updated" {% if f_action == 'updated' %}selected{% endif %}>Updated</option>
+          <option value="deleted" {% if f_action == 'deleted' %}selected{% endif %}>Deleted</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">User</label>
+        <select name="user" class="form-select">
+          <option value="">All</option>
+          {% for u in users %}<option value="{{ u.id }}" {% if u.id|stringformat:"s" == f_user %}selected{% endif %}>{{ u.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">From</label>
+        <input type="date" name="from" value="{{ f_from }}" class="form-control">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">To</label>
+        <input type="date" name="to" value="{{ f_to }}" class="form-control">
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-primary w-100"><i class="bi bi-funnel me-1"></i> Filter</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white border-bottom fw-semibold">Latest changes (newest 300)</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr><th>When</th><th>User</th><th>Action</th><th>Record</th><th>Branch</th><th>What changed</th></tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td class="text-nowrap">{{ log.created_at|date:"d M Y H:i" }}</td>
+            <td>{{ log.user.username|default:"—" }}</td>
+            <td>
+              <span class="badge {% if log.action == 'deleted' %}bg-danger{% elif log.action == 'updated' %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ log.action }}</span>
+            </td>
+            <td>{{ log.model_name }}: {{ log.object_repr }}</td>
+            <td>{{ log.branch.name|default:"—" }}</td>
+            <td class="small">
+              {% for field, vals in log.changes.items %}
+                <div><strong>{{ field }}</strong>: {{ vals.0 }} &rarr; {{ vals.1 }}</div>
+              {% endfor %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-muted py-4">Nothing recorded yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
