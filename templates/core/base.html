@@ -225,6 +225,12 @@
       <i class="bi bi-journal-text"></i> Audit Log
     </a>
         {% if user.role == 'admin' or user.role == 'owner' or user.role == 'branch_manager' %}
+    <a class="nav-link {% if request.resolver_match.url_name == 'targets' %}active{% endif %}"
+       href="{% url 'targets' %}">
+      <i class="bi bi-bullseye"></i> Targets
+    </a>
+    {% endif %}
+        {% if user.role == 'admin' or user.role == 'owner' or user.role == 'branch_manager' %}
     <a class="nav-link {% if request.resolver_match.url_name == 'supplier_list' %}active{% endif %}"
        href="{% url 'supplier_list' %}">
       <i class="bi bi-people"></i> Suppliers

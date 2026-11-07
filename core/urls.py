@@ -43,4 +43,7 @@ urlpatterns = [
     path('spending-requests/', views.request_list, name='request_list'),
     path('spending-requests/new/', views.request_create, name='request_create'),
     path('spending-requests/<int:request_id>/decide/', views.request_decide, name='request_decide'),
+    path('targets/', views.targets, name='targets'),
+    path('targets/set/', views.target_set, name='target_set'),
+    path('cash/opening/', views.opening_cash_set, name='opening_cash_set'),
 ]

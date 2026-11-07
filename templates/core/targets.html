@@ -1,0 +1,95 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+{% block content %}
+
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label fw-semibold">Year</label>
+        <select name="year" class="form-select">
+          {% for y in years %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-semibold">Month</label>
+        <select name="month" class="form-select">
+          {% for num, name in month_names %}<option value="{{ num }}" {% if num == month %}selected{% endif %}>{{ name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <button type="submit" class="btn btn-primary w-100"><i class="bi bi-funnel me-1"></i> Show</button>
+      </div>
+      {% if can_set %}
+      <div class="col-md-3">
+        <a href="{% url 'target_set' %}?year={{ year }}&month={{ month }}" class="btn btn-outline-success w-100">
+          <i class="bi bi-bullseye me-1"></i> Set targets
+        </a>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+{% if is_current %}
+<p class="text-muted small">{{ pace_pct }}% of the month has passed. Green means a branch is at or ahead of that share of its target.</p>
+{% endif %}
+
+{% if combined %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-dark text-white fw-semibold">Whole business</div>
+  <div class="card-body">
+    {% for r in combined %}
+      <div class="mb-3">
+        <div class="d-flex justify-content-between">
+          <strong>{{ r.label }}</strong>
+          <span>{{ r.actual|floatformat:0|intcomma }}{% if r.target %} of {{ r.target|floatformat:0|intcomma }}{% endif %} {{ r.unit }}</span>
+        </div>
+        {% if r.target %}
+        <div class="progress" style="height:10px"><div class="progress-bar bg-{{ r.css }}" style="width:{{ r.bar }}%"></div></div>
+        <small class="text-muted">{{ r.pct }}% of target</small>
+        {% else %}<small class="text-muted">No target set</small>{% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% for card in cards %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white border-bottom fw-semibold">{{ card.name }}</div>
+  <div class="card-body">
+    <div class="row g-4">
+      <div class="col-lg-7">
+        {% for r in card.rows %}
+          <div class="mb-3">
+            <div class="d-flex justify-content-between">
+              <strong>{{ r.label }}</strong>
+              <span>{{ r.actual|floatformat:0|intcomma }}{% if r.target %} of {{ r.target|floatformat:0|intcomma }}{% endif %} {{ r.unit }}</span>
+            </div>
+            {% if r.target %}
+            <div class="progress" style="height:10px"><div class="progress-bar bg-{{ r.css }}" style="width:{{ r.bar }}%"></div></div>
+            <small class="text-muted">{{ r.pct }}% of target</small>
+            {% else %}<small class="text-muted">No target set</small>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="col-lg-5">
+        <div class="fw-semibold mb-2">Manager scorecard</div>
+        <table class="table table-sm mb-0">
+          <tbody>
+            {% for label, value, css in card.score %}
+            <tr>
+              <td class="small">{{ label }}</td>
+              <td class="text-end"><span class="badge bg-{{ css }}">{{ value }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}

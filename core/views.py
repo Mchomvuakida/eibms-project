@@ -23,6 +23,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from django.utils.dateparse import parse_date
 import csv
 import pandas as pd
+import calendar
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -30,12 +31,12 @@ from rest_framework.response import Response
 
 from .models import (
     Expense, Branch, Production, Product, Sale,
-    Customer, Truck, TripLog, InventoryLog, User, BankDeposit,     SaleItem, EXPENSE_CATEGORIES, Payment, AuditLog,
-    Supplier, SupplierBill, SupplierPayment, SpendingRequest
+    Customer, Truck, TripLog, InventoryLog, User, BankDeposit, SaleItem, EXPENSE_CATEGORIES, Payment, AuditLog,
+    Supplier, SupplierBill, SupplierPayment, SpendingRequest, Target, OpeningCash
 )
 from .forms import (
     ExpenseForm, ProductionForm, SaleForm,
-    SaleItemFormSet, TripLogForm, StockPurchaseForm, BankDepositForm, SupplierForm, SupplierBillForm, BillPayForm, SpendingRequestForm
+    SaleItemFormSet, TripLogForm, StockPurchaseForm, BankDepositForm, SupplierForm, SupplierBillForm, BillPayForm, SpendingRequestForm, TargetForm, OpeningCashForm
 )
 
 
@@ -155,8 +156,127 @@ def deposit_create(request):
     })
 
 @role_required('admin', 'owner', 'branch_manager')
-@login_required
 def cash_reconciliation(request):
+    scope = get_branch_filter(request.user)  # None for owner/admin
+    branch_choices = Branch.objects.filter(status='active') if scope is None else None
+    branch = scope
+    if scope is None:
+        branch_id = request.GET.get('branch', '')
+        if branch_id.isdigit():
+            branch = Branch.objects.filter(id=int(branch_id)).first()
+
+    period = request.GET.get('period', 'this_month')
+    today = timezone.localdate()
+    if period == 'last_month':
+        first_of_this_month = today.replace(day=1)
+        end_date = first_of_this_month - timedelta(days=1)
+        start_date = end_date.replace(day=1)
+    else:
+        period = 'this_month'
+        start_date = today.replace(day=1)
+        end_date = today
+    year, month = start_date.year, start_date.month
+
+    payments_qs = Payment.objects.filter(
+        method='cash', payment_date__gte=start_date, payment_date__lte=end_date)
+    expenses_qs = Expense.objects.filter(
+        payment_source='cash', date__gte=start_date, date__lte=end_date)
+    supplier_paid_qs = SupplierPayment.objects.filter(
+        method='cash', payment_date__gte=start_date, payment_date__lte=end_date)
+    deposits_qs = BankDeposit.objects.filter(
+        deposit_date__gte=start_date, deposit_date__lte=end_date)
+    opening_qs = OpeningCash.objects.filter(year=year, month=month)
+
+    if branch:
+        payments_qs = payments_qs.filter(branch=branch)
+        expenses_qs = expenses_qs.filter(branch=branch)
+        supplier_paid_qs = supplier_paid_qs.filter(bill__branch=branch)
+        deposits_qs = deposits_qs.filter(branch=branch)
+        opening_qs = opening_qs.filter(branch=branch)
+
+    zero = Decimal('0')
+    cash_from_sales = payments_qs.filter(kind='sale').aggregate(t=Sum('amount'))['t'] or zero
+    cash_from_repayments = payments_qs.filter(kind='repayment').aggregate(t=Sum('amount'))['t'] or zero
+    cash_received = cash_from_sales + cash_from_repayments
+    cash_expenses = (
+        (expenses_qs.aggregate(t=Sum('amount'))['t'] or zero)
+        + (supplier_paid_qs.aggregate(t=Sum('amount'))['t'] or zero)
+    )
+    total_deposits = deposits_qs.aggregate(t=Sum('amount'))['t'] or zero
+    opening = opening_qs.aggregate(t=Sum('amount'))['t'] or zero
+    needed = 1 if branch else Branch.objects.filter(status='active').count()
+    opening_missing = opening_qs.count() < needed
+
+    expected = opening + cash_received - cash_expenses - total_deposits
+    recent_deposits = deposits_qs.select_related('branch', 'logged_by').order_by('-deposit_date')[:20]
+
+    return render(request, 'core/cash_reconciliation.html', {
+        'title': 'Cash Reconciliation',
+        'period': period, 'start_date': start_date, 'end_date': end_date,
+        'year': year, 'month': month,
+        'branch_choices': branch_choices, 'selected_branch': branch,
+        'opening': opening, 'opening_missing': opening_missing,
+        'cash_received': cash_received,
+        'cash_from_sales': cash_from_sales, 'cash_from_repayments': cash_from_repayments,
+        'cash_expenses': cash_expenses, 'total_deposits': total_deposits,
+        'expected_undeposited': expected,
+        'recent_deposits': recent_deposits,
+    })
+
+
+@role_required('admin', 'owner', 'branch_manager')
+def opening_cash_set(request):
+    today = timezone.localdate()
+    if request.method == 'POST':
+        form = OpeningCashForm(request.POST)
+        if form.is_valid():
+            cd = form.cleaned_data
+            branch = cd.get('branch') if request.user.role in ('admin', 'owner') else request.user.branch
+            if not branch:
+                form.add_error('branch', 'Choose a branch.')
+            else:
+                OpeningCash.objects.update_or_create(
+                    branch=branch, year=cd['year'], month=cd['month'],
+                    defaults={'amount': cd['amount'], 'note': cd.get('note') or '',
+                              'counted_by': request.user})
+                messages.success(request, 'Opening cash saved.')
+                last = today.replace(day=1) - timedelta(days=1)
+                period = 'last_month' if (cd['year'], cd['month']) == (last.year, last.month) else 'this_month'
+                return redirect(f"{reverse('cash_reconciliation')}?period={period}&branch={branch.id}"
+                                if request.user.role in ('admin', 'owner')
+                                else f"{reverse('cash_reconciliation')}?period={period}")
+    else:
+        try:
+            y = int(request.GET.get('year', today.year))
+            m = int(request.GET.get('month', today.month))
+        except ValueError:
+            y, m = today.year, today.month
+        initial = {'year': y, 'month': m}
+        branch_id = request.GET.get('branch', '')
+        target_branch = None
+        if request.user.role in ('admin', 'owner') and branch_id.isdigit():
+            target_branch = int(branch_id)
+            initial['branch'] = target_branch
+        elif request.user.role not in ('admin', 'owner') and request.user.branch:
+            target_branch = request.user.branch.id
+        if target_branch:
+            existing = OpeningCash.objects.filter(branch_id=target_branch, year=y, month=m).first()
+            if existing:
+                initial['amount'] = existing.amount
+                initial['note'] = existing.note
+        form = OpeningCashForm(initial=initial)
+
+    return render(request, 'core/generic_form.html', {
+        'form': form, 'title': 'Opening Cash for the Month',
+        'intro': 'Count the cash held at the branch at the start of the month and enter the total. '
+                 'The reconciliation starts from this number.',
+        'submit_label': 'Save opening cash',
+        'cancel_url': reverse('cash_reconciliation'),
+    })
+
+@role_required('admin', 'owner', 'branch_manager')
+@login_required
+def cash_reconciliation_old(request):
     branch = get_branch_filter(request.user)
 
     period = request.GET.get('period', 'this_month')
@@ -755,7 +875,9 @@ def stock_purchase(request):
                             branch=product.branch, category='raw_materials',
                             amount=total_cost, description=description, date=date,
                             is_stock_purchase=True,
-                            payment_source='credit' if supplier_obj else 'cash',
+                            payment_source='credit' if supplier_obj else (
+                                'cash' if (cd.get('payment_method') or 'cash') == 'cash'
+                                else 'bank_mobile'),
                         )
                         if supplier_obj:
                             create_supplier_bill(
@@ -867,8 +989,8 @@ def production_list(request):
     return render(request, 'core/production_list.html', {
         'productions': productions,
         'title': 'Production Records',
+        'is_clerk': request.user.role == 'clerk',
     })
-
 
 @login_required
 def production_create(request):
@@ -883,13 +1005,135 @@ def production_create(request):
                     else:
                         production.branch = production.product.branch
 
-                    recipe = production.product.get_production_recipe()
+                    if production.quantity <= 0:
+                        raise ValidationError('Quantity must be more than zero.')
+
+                    try:
+                        recipe = production.product.get_production_recipe()
+                    except ValueError as err:
+                        raise ValidationError(str(err))
                     if not recipe:
                         raise ValidationError('No production recipe defined for this product.')
 
+                    materials_cost = Decimal('0')
+                    missing_cost = []
+                    consumed = {}
+                    sand_override = form.cleaned_data.get('sand_used')
+                    sand_id = production.product.get_sand_product_id()
                     for raw_id, qty_per_unit in recipe.items():
                         raw_product = get_object_or_404(Product, id=raw_id, branch=production.branch)
                         required = qty_per_unit * production.quantity
+                        if sand_override is not None and raw_id == sand_id:
+                            required = sand_override
+                        consumed[str(raw_id)] = float(required)
+
+                        if raw_product.current_stock < required:
+                            raise ValidationError(
+                                f'Insufficient {raw_product.name}. '
+                                f'Available: {raw_product.current_stock}, Needed: {required}'
+                            )
+                        if raw_product.cost_price:
+                            materials_cost += raw_product.cost_price * required
+                        else:
+                            missing_cost.append(raw_product.name)
+
+                        stock_before = raw_product.current_stock
+                        Product.objects.filter(id=raw_product.id).update(
+                            current_stock=F('current_stock') - required
+                        )
+                        InventoryLog.objects.create(
+                            product=raw_product,
+                            branch=production.branch,
+                            movement_type='production_out',
+                            quantity=-required,
+                            stock_before=stock_before,
+                            stock_after=stock_before - required,
+                            reference_note=f'Production — {production.product.name}',
+                            created_by=request.user,
+                        )
+
+                    total_cost = materials_cost + (production.labor_cost or Decimal('0'))
+                    unit_cost = (total_cost / production.quantity).quantize(Decimal('0.01'))
+
+                    finished = Product.objects.get(id=production.product.id)
+                    stock_before_finished = finished.current_stock
+                    old_stock = finished.current_stock if finished.current_stock > 0 else Decimal('0')
+                    old_cost = finished.cost_price or Decimal('0')
+                    if old_stock > 0 and old_cost > 0:
+                        new_cost = ((old_stock * old_cost) + total_cost) / (old_stock + production.quantity)
+                    else:
+                        new_cost = unit_cost
+                    Product.objects.filter(id=finished.id).update(
+                        current_stock=F('current_stock') + production.quantity,
+                        cost_price=new_cost.quantize(Decimal('0.01')),
+                    )
+
+                    production.raw_materials_consumed = consumed
+                    production.material_cost = materials_cost.quantize(Decimal('0.01'))
+                    production.unit_cost = unit_cost
+                    production.cost_note = (
+                        ('No cost price for: ' + ', '.join(missing_cost))[:255] if missing_cost else '')
+                    production.save()
+                    InventoryLog.objects.create(
+                        product=finished,
+                        branch=production.branch,
+                        movement_type='production_in',
+                        quantity=production.quantity,
+                        stock_before=stock_before_finished,
+                        stock_after=stock_before_finished + production.quantity,
+                        reference_note=f'Production #{production.id}',
+                        created_by=request.user,
+                    )
+
+                    if request.user.role == 'clerk':
+                        messages.success(request, 'Production recorded! Raw materials deducted.')
+                    else:
+                        msg = f'Production recorded. Cost per unit: {unit_cost:,.0f} TZS.'
+                        if missing_cost:
+                            msg += ' Cost is incomplete: no cost price for ' + ', '.join(missing_cost) + '.'
+                        messages.success(request, msg)
+                    return redirect('production_list')
+            except ValidationError as e:
+                messages.error(request, e.messages[0])
+    else:
+        form = ProductionForm(user=request.user)
+
+    return render(request, 'core/production_form.html', {
+        'form': form,
+        'title': 'Record New Production',
+    })
+
+@login_required
+def production_create_old(request):
+    if request.method == 'POST':
+        form = ProductionForm(request.POST, user=request.user)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    production = form.save(commit=False)
+                    if request.user.role not in ['admin', 'owner']:
+                        production.branch = request.user.branch
+                    else:
+                        production.branch = production.product.branch
+
+                    try:
+                        recipe = production.product.get_production_recipe()
+                    except ValueError as err:
+                        raise ValidationError(str(err))
+                    if not recipe:
+                        raise ValidationError('No production recipe defined for this product.')
+
+                    materials_cost = Decimal('0')
+                    missing_cost = []
+                    consumed = {}
+                    sand_override = form.cleaned_data.get('sand_used')
+                    sand_id = production.product.get_sand_product_id()
+                    for raw_id, qty_per_unit in recipe.items():
+                        raw_product = get_object_or_404(Product, id=raw_id, branch=production.branch)
+                        required = qty_per_unit * production.quantity
+                        if sand_override is not None and raw_id == sand_id:
+                            required = sand_override
+                        consumed[str(raw_id)] = float(required)
                         if raw_product.current_stock < required:
                             raise ValidationError(
                                 f'Insufficient {raw_product.name}. '
@@ -915,10 +1159,7 @@ def production_create(request):
                     Product.objects.filter(id=production.product.id).update(
                         current_stock=F('current_stock') + production.quantity
                     )
-                    production.raw_materials_consumed = {
-                        str(rid): float(qty_per_unit * production.quantity)
-                        for rid, qty_per_unit in recipe.items()
-                    }
+                    production.raw_materials_consumed = consumed
                     production.save()
                     InventoryLog.objects.create(
                         product=finished,
@@ -1932,3 +2173,218 @@ def request_decide(request, request_id):
             req.save()
             messages.success(request, f'Request {req.status}.')
     return redirect('request_list')
+
+METRIC_INFO = {
+    'sales': ('Sales', 'TZS', True),
+    'gross_profit': ('Gross profit', 'TZS', True),
+    'running_costs': ('Running costs (limit)', 'TZS', False),
+    'production': ('Blocks produced', 'blocks', True),
+}
+
+
+def target_status(actual, target, pace, higher_is_better):
+    if not target or pace == 0:
+        return 'none' if not target else 'ok'
+    expected = target * pace
+    ratio = actual / expected if expected else 0
+    if higher_is_better:
+        return 'ok' if ratio >= 1 else ('warn' if ratio >= 0.8 else 'bad')
+    return 'ok' if ratio <= 1 else ('warn' if ratio <= 1.1 else 'bad')
+
+
+STATUS_CSS = {'ok': 'success', 'warn': 'warning', 'bad': 'danger', 'none': 'secondary'}
+
+
+def share_css(pct):
+    if pct is None:
+        return 'secondary'
+    return 'success' if pct >= 95 else ('warning' if pct >= 80 else 'danger')
+
+
+def month_actuals(branch, year, month):
+    cost_expr = ExpressionWrapper(
+        F('quantity') * F('unit_cost'),
+        output_field=DecimalField(max_digits=18, decimal_places=2))
+    zero = Decimal('0')
+
+    sales_qs = Sale.objects.filter(branch=branch, sale_date__year=year, sale_date__month=month)
+    revenue = sales_qs.aggregate(t=Sum('total_amount'))['t'] or zero
+    cogs = SaleItem.objects.filter(
+        sale__branch=branch, sale__sale_date__year=year, sale__sale_date__month=month
+    ).aggregate(t=Sum(cost_expr))['t'] or zero
+
+    exp_qs = Expense.objects.filter(branch=branch, date__year=year, date__month=month)
+    running = exp_qs.filter(is_stock_purchase=False).aggregate(t=Sum('amount'))['t'] or zero
+    produced = Production.objects.filter(
+        branch=branch, production_date__year=year, production_date__month=month
+    ).aggregate(t=Sum('quantity'))['t'] or zero
+
+    sales_n = sales_qs.count()
+    sales_same_day = sales_qs.filter(created_at__date=F('sale_date')).count()
+    exp_n = exp_qs.count()
+    exp_same_day = exp_qs.filter(created_at__date=F('date')).count()
+
+    cash_in = Payment.objects.filter(
+        branch=branch, method='cash', payment_date__year=year, payment_date__month=month
+    ).aggregate(t=Sum('amount'))['t'] or zero
+    cash_exp = exp_qs.filter(payment_source='cash').aggregate(t=Sum('amount'))['t'] or zero
+    cash_suppliers = SupplierPayment.objects.filter(
+        bill__branch=branch, method='cash',
+        payment_date__year=year, payment_date__month=month
+    ).aggregate(t=Sum('amount'))['t'] or zero
+    banked = BankDeposit.objects.filter(
+        branch=branch, deposit_date__year=year, deposit_date__month=month
+    ).aggregate(t=Sum('amount'))['t'] or zero
+    opening = OpeningCash.objects.filter(branch=branch, year=year, month=month).aggregate(
+        t=Sum('amount'))['t'] or zero
+    owed = Customer.objects.filter(branch=branch, is_active=True).aggregate(
+        t=Sum('balance_owed'))['t'] or zero
+    low_stock = Product.objects.filter(
+        branch=branch, is_active=True, track_stock=True,
+        current_stock__lte=F('min_threshold')).count()
+
+    def pct(part, whole):
+        return round(part / whole * 100) if whole else None
+
+    return {
+        'sales': float(revenue),
+        'gross_profit': float(revenue - cogs),
+        'running_costs': float(running),
+        'production': float(produced),
+        'score': {
+            'sales_same_day': pct(sales_same_day, sales_n),
+            'sales_n': sales_n, 'sales_same_n': sales_same_day,
+            'exp_same_day': pct(exp_same_day, exp_n),
+            'exp_n': exp_n, 'exp_same_n': exp_same_day,
+            'not_banked': float(opening + cash_in - cash_exp - cash_suppliers - banked),
+            'customers_owe': float(owed),
+            'low_stock': low_stock,
+        },
+    }
+
+
+@role_required('admin', 'owner', 'branch_manager')
+def targets(request):
+    today = timezone.localdate()
+    try:
+        year = int(request.GET.get('year', today.year))
+        month = int(request.GET.get('month', today.month))
+    except ValueError:
+        year, month = today.year, today.month
+    if not 1 <= month <= 12:
+        month = today.month
+
+    scope = get_branch_filter(request.user)
+    branches = [scope] if scope else list(Branch.objects.filter(status='active'))
+
+    days_in_month = calendar.monthrange(year, month)[1]
+    if (year, month) == (today.year, today.month):
+        elapsed = today.day
+    elif (year, month) < (today.year, today.month):
+        elapsed = days_in_month
+    else:
+        elapsed = 0
+    pace = elapsed / days_in_month
+
+    target_map = {
+        (t.branch_id, t.metric): float(t.value)
+        for t in Target.objects.filter(branch__in=branches, year=year, month=month)
+    }
+
+    def build_rows(actuals, targets_by_metric):
+        rows = []
+        for key, (label, unit, higher) in METRIC_INFO.items():
+            target = targets_by_metric.get(key, 0)
+            actual = actuals[key]
+            pct_done = round(actual / target * 100) if target else None
+            rows.append({
+                'label': label, 'unit': unit, 'target': target, 'actual': actual,
+                'pct': pct_done, 'bar': min(pct_done, 100) if pct_done is not None else 0,
+                'css': STATUS_CSS[target_status(actual, target, pace, higher)],
+                'expected': target * pace,
+            })
+        return rows
+
+    cards = []
+    total_actuals = {k: 0.0 for k in METRIC_INFO}
+    total_targets = {k: 0.0 for k in METRIC_INFO}
+    for b in branches:
+        a = month_actuals(b, year, month)
+        t = {k: target_map.get((b.id, k), 0) for k in METRIC_INFO}
+        for k in METRIC_INFO:
+            total_actuals[k] += a[k]
+            total_targets[k] += t[k]
+        s = a['score']
+        score_rows = [
+            ('Sales recorded the same day',
+             f"{s['sales_same_day']}% ({s['sales_same_n']} of {s['sales_n']})" if s['sales_n'] else '—',
+             share_css(s['sales_same_day'])),
+            ('Expenses recorded the same day',
+             f"{s['exp_same_day']}% ({s['exp_same_n']} of {s['exp_n']})" if s['exp_n'] else '—',
+             share_css(s['exp_same_day'])),
+            ('Cash expected but not yet banked', f"{s['not_banked']:,.0f} TZS",
+             'danger' if s['not_banked'] < 0 else 'secondary'),
+            ('Customers owing money', f"{s['customers_owe']:,.0f} TZS", 'secondary'),
+            ('Products low on stock', str(s['low_stock']),
+             'warning' if s['low_stock'] else 'success'),
+        ]
+        cards.append({'name': b.name, 'rows': build_rows(a, t), 'score': score_rows})
+
+    combined = None
+    if len(branches) > 1:
+        combined = build_rows(total_actuals, total_targets)
+
+    month_names = [(i, calendar.month_name[i]) for i in range(1, 13)]
+    return render(request, 'core/targets.html', {
+        'title': 'Targets and Scorecard',
+        'cards': cards, 'combined': combined,
+        'year': year, 'month': month, 'month_names': month_names,
+        'years': range(2025, today.year + 2),
+        'pace_pct': round(pace * 100),
+        'is_current': (year, month) == (today.year, today.month),
+        'can_set': request.user.role in ('admin', 'owner'),
+    })
+
+
+@role_required('admin', 'owner')
+def target_set(request):
+    today = timezone.localdate()
+    if request.method == 'POST':
+        form = TargetForm(request.POST)
+        if form.is_valid():
+            cd = form.cleaned_data
+            months = range(cd['month'], 13) if cd['apply_to_rest_of_year'] else [cd['month']]
+            for key in METRIC_INFO:
+                value = cd.get(key)
+                if value is None:
+                    continue
+                for m in months:
+                    if value == 0:
+                        Target.objects.filter(
+                            branch=cd['branch'], year=cd['year'], month=m, metric=key).delete()
+                    else:
+                        Target.objects.update_or_create(
+                            branch=cd['branch'], year=cd['year'], month=m, metric=key,
+                            defaults={'value': value})
+            messages.success(request, 'Targets saved.')
+            return redirect(f"{reverse('targets')}?year={cd['year']}&month={cd['month']}")
+    else:
+        try:
+            y = int(request.GET.get('year', today.year))
+            m = int(request.GET.get('month', today.month))
+        except ValueError:
+            y, m = today.year, today.month
+        initial = {'year': y, 'month': m}
+        branch_id = request.GET.get('branch', '')
+        if branch_id.isdigit():
+            initial['branch'] = int(branch_id)
+            for t in Target.objects.filter(branch_id=int(branch_id), year=y, month=m):
+                initial[t.metric] = t.value
+        form = TargetForm(initial=initial)
+
+    return render(request, 'core/generic_form.html', {
+        'form': form, 'title': 'Set Monthly Targets',
+        'intro': 'Leave a box empty to keep its current target. Enter 0 to remove a target.',
+        'submit_label': 'Save targets',
+        'cancel_url': reverse('targets'),
+    })

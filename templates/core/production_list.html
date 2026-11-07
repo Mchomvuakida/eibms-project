@@ -26,7 +26,7 @@
               <th>Date</th>
               <th>Product</th>
               <th>Quantity</th>
-              <th>Labor Cost (TZS)</th>
+              {% if not is_clerk %}<th>Labor Cost (TZS)</th><th>Cost per unit (TZS)</th>{% endif %}
               <th>Branch</th>
             </tr>
           </thead>
@@ -36,7 +36,10 @@
                 <td>{{ prod.production_date|date:"d M Y" }}</td>
                 <td>{{ prod.product.name }}</td>
                 <td class="text-center">{{ prod.quantity|intcomma }}</td>
+                {% if not is_clerk %}
                 <td class="text-end">{{ prod.labor_cost|floatformat:0|intcomma }}</td>
+                <td class="text-end">{{ prod.unit_cost|floatformat:0|intcomma }}{% if prod.cost_note %} <i class="bi bi-exclamation-triangle text-warning" title="{{ prod.cost_note }}"></i>{% endif %}</td>
+                {% endif %}
                 <td>{{ prod.branch.name }}</td>
               </tr>
             {% endfor %}

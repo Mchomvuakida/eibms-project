@@ -8,10 +8,10 @@ _local = threading.local()
 
 TRACKED = ['Sale', 'Expense', 'Product', 'Customer', 'BankDeposit',
            'Payment', 'Production', 'Truck', 'User',
-           'Supplier', 'SupplierBill', 'SupplierPayment', 'SpendingRequest']
+           'Supplier', 'SupplierBill', 'SupplierPayment', 'SpendingRequest', 'Target', 'OpeningCash']
 LOG_CREATES = {'Expense', 'Product', 'Customer', 'BankDeposit',
                'Payment', 'Production', 'Truck', 'User',
-               'Supplier', 'SupplierBill', 'SupplierPayment', 'SpendingRequest'}
+               'Supplier', 'SupplierBill', 'SupplierPayment', 'SpendingRequest', 'Target', 'OpeningCash'}
 IGNORE_FIELDS = {'last_login', 'password', 'created_at'}
 
 

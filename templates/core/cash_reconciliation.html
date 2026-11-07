@@ -1,108 +1,125 @@
 {% extends 'core/base.html' %}
 {% load humanize %}
-{% load i18n %}
 
-{% block page_title %}{% trans "Cash Reconciliation" %}{% endblock %}
+{% block page_title %}Cash Reconciliation{% endblock %}
 {% block page_icon %}cash-stack{% endblock %}
 
 {% block content %}
 
-  <div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div class="d-flex flex-wrap gap-2 align-items-center">
     <div class="btn-group">
-      <a href="?period=this_month" class="btn btn-sm {% if period == 'this_month' %}btn-primary{% else %}btn-outline-primary{% endif %}">
-        {% trans "This Month" %}
-      </a>
-      <a href="?period=last_month" class="btn btn-sm {% if period == 'last_month' %}btn-primary{% else %}btn-outline-primary{% endif %}">
-        {% trans "Last Month" %}
-      </a>
+      <a href="?period=this_month{% if selected_branch and branch_choices %}&branch={{ selected_branch.id }}{% endif %}"
+         class="btn btn-sm {% if period == 'this_month' %}btn-primary{% else %}btn-outline-primary{% endif %}">This Month</a>
+      <a href="?period=last_month{% if selected_branch and branch_choices %}&branch={{ selected_branch.id }}{% endif %}"
+         class="btn btn-sm {% if period == 'last_month' %}btn-primary{% else %}btn-outline-primary{% endif %}">Last Month</a>
     </div>
-    <a href="{% url 'deposit_create' %}" class="btn btn-success">
-      <i class="bi bi-plus-circle me-1"></i> {% trans "Log Deposit" %}
-    </a>
+    {% if branch_choices %}
+    <form method="get" class="d-flex">
+      <input type="hidden" name="period" value="{{ period }}">
+      <select name="branch" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="">All branches</option>
+        {% for b in branch_choices %}
+          <option value="{{ b.id }}" {% if selected_branch and b.id == selected_branch.id %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    {% endif %}
   </div>
-
-  <p class="text-muted small">{{ start_date|date:"d M Y" }} &mdash; {{ end_date|date:"d M Y" }}</p>
-
-  <div class="row g-3 mb-4">
-    <div class="col-md-3">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body text-center">
-          <div class="text-muted small mb-1">Cash Received</div>
-          <div class="fs-5 fw-bold text-primary">{{ cash_sales|floatformat:0|intcomma }}</div>
-          <div class="text-muted small">sales {{ cash_from_sales|floatformat:0|intcomma }} + repayments {{ cash_from_repayments|floatformat:0|intcomma }}</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body text-center">
-          <div class="text-muted small mb-1">{% trans "Cash Expenses" %}</div>
-          <div class="fs-5 fw-bold text-danger">{{ cash_expenses|floatformat:0|intcomma }}</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body text-center">
-          <div class="text-muted small mb-1">{% trans "Deposited to Bank" %}</div>
-          <div class="fs-5 fw-bold text-success">{{ total_deposits|floatformat:0|intcomma }}</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card border-0 shadow-sm h-100 {% if expected_undeposited > 0 %}border-warning{% endif %}">
-        <div class="card-body text-center">
-          <div class="text-muted small mb-1">{% trans "Expected Undeposited Cash" %}</div>
-         <div class="fs-5 fw-bold {% if expected_undeposited > 0 %}text-warning{% elif expected_undeposited < 0 %}text-danger{% else %}text-success{% endif %}">
-            {{ expected_undeposited|floatformat:0|intcomma }}
-          </div>
-        </div>
-      </div>
-    </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'opening_cash_set' %}?year={{ year }}&month={{ month }}{% if selected_branch and branch_choices %}&branch={{ selected_branch.id }}{% endif %}"
+       class="btn btn-outline-secondary"><i class="bi bi-cash-coin me-1"></i> Set opening cash</a>
+    <a href="{% url 'deposit_create' %}" class="btn btn-success"><i class="bi bi-plus-circle me-1"></i> Log Deposit</a>
   </div>
+</div>
 
-  {% if expected_undeposited > 0 %}
-    <div class="alert alert-warning">
-      <i class="bi bi-exclamation-triangle me-2"></i>
-      {% blocktrans %}This much cash should still be on hand or on its way to the bank for this period. If a physical count shows less than this, that's the gap to investigate.{% endblocktrans %}
-    </div>
-  {% endif %}
+<p class="text-muted small">
+  {% if selected_branch %}{{ selected_branch.name }}{% else %}All branches{% endif %}
+  &middot; {{ start_date|date:"d M Y" }} &mdash; {{ end_date|date:"d M Y" }}
+</p>
 
-  {% if expected_undeposited < 0 %}
-    <div class="alert alert-danger">
-      <i class="bi bi-exclamation-octagon me-2"></i>
-      More was deposited than the cash recorded as received. Check for cash held from before EIBMS started, sales not yet entered, or a deposit entered with the wrong amount.
-    </div>
-  {% endif %}
-
-  <div class="card border-0 shadow-sm">
-    <div class="card-header bg-white border-bottom fw-semibold">{% trans "Recent Deposits" %}</div>
-    <div class="card-body p-0">
-      <table class="table table-hover mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>{% trans "Date" %}</th>
-            <th>{% trans "Branch" %}</th>
-            <th class="text-end">{% trans "Amount (TZS)" %}</th>
-            <th>{% trans "Reference" %}</th>
-            <th>Logged By</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for deposit in recent_deposits %}
-          <tr>
-            <td>{{ deposit.deposit_date|date:"d M Y" }}</td>
-            <td>{{ deposit.branch.name }}</td>
-            <td class="text-end">{{ deposit.amount|floatformat:0|intcomma }}</td>
-            <td>{{ deposit.reference|default:"—" }}</td>
-            <td>{{ deposit.logged_by.get_full_name|default:deposit.logged_by.username|default:"—" }}</td>
-          </tr>
-          {% empty %}
-          <tr><td colspan="5" class="text-center text-muted py-3">{% trans "No deposits logged for this period yet." %}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+<div class="row row-cols-1 row-cols-md-5 g-3 mb-4">
+  <div class="col">
+    <div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+      <div class="text-muted small mb-1">Opening cash</div>
+      <div class="fs-5 fw-bold text-secondary">{{ opening|floatformat:0|intcomma }}</div>
+      {% if opening_missing %}<div class="text-danger small">not set</div>{% endif %}
+    </div></div>
   </div>
+  <div class="col">
+    <div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+      <div class="text-muted small mb-1">Cash received</div>
+      <div class="fs-5 fw-bold text-primary">{{ cash_received|floatformat:0|intcomma }}</div>
+      <div class="text-muted small">sales {{ cash_from_sales|floatformat:0|intcomma }} + repayments {{ cash_from_repayments|floatformat:0|intcomma }}</div>
+    </div></div>
+  </div>
+  <div class="col">
+    <div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+      <div class="text-muted small mb-1">Cash expenses</div>
+      <div class="fs-5 fw-bold text-danger">{{ cash_expenses|floatformat:0|intcomma }}</div>
+      <div class="text-muted small">incl. cash paid to suppliers</div>
+    </div></div>
+  </div>
+  <div class="col">
+    <div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+      <div class="text-muted small mb-1">Deposited to bank</div>
+      <div class="fs-5 fw-bold text-success">{{ total_deposits|floatformat:0|intcomma }}</div>
+    </div></div>
+  </div>
+  <div class="col">
+    <div class="card border-0 shadow-sm h-100 {% if expected_undeposited > 0 %}border-warning{% endif %}"><div class="card-body text-center">
+      <div class="text-muted small mb-1">Cash that should be on hand</div>
+      <div class="fs-5 fw-bold {% if expected_undeposited > 0 %}text-warning{% elif expected_undeposited < 0 %}text-danger{% else %}text-success{% endif %}">
+        {{ expected_undeposited|floatformat:0|intcomma }}
+      </div>
+      <div class="text-muted small">opening + received &minus; expenses &minus; deposits</div>
+    </div></div>
+  </div>
+</div>
+
+{% if opening_missing %}
+<div class="alert alert-info">
+  <i class="bi bi-info-circle me-2"></i>
+  Opening cash is not set for this month. Cash left over from last month is missing from these figures,
+  so the result can look negative. Count the cash and use <strong>Set opening cash</strong>.
+</div>
+{% endif %}
+
+{% if expected_undeposited < 0 %}
+<div class="alert alert-danger">
+  <i class="bi bi-exclamation-octagon me-2"></i>
+  The records show more cash going out than coming in. Check that each expense is marked as paid in cash
+  only if it really was, that sales are all entered, and that deposits have the right amount.
+</div>
+{% elif expected_undeposited > 0 %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-2"></i>
+  This much cash should be on hand or on its way to the bank. If a physical count shows less, that is the gap to investigate.
+</div>
+{% endif %}
+
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white border-bottom fw-semibold">Recent Deposits</div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr><th>Date</th><th>Branch</th><th class="text-end">Amount (TZS)</th><th>Reference</th><th>Logged By</th></tr>
+      </thead>
+      <tbody>
+        {% for deposit in recent_deposits %}
+        <tr>
+          <td>{{ deposit.deposit_date|date:"d M Y" }}</td>
+          <td>{{ deposit.branch.name }}</td>
+          <td class="text-end">{{ deposit.amount|floatformat:0|intcomma }}</td>
+          <td>{{ deposit.reference|default:"—" }}</td>
+          <td>{{ deposit.logged_by.get_full_name|default:deposit.logged_by.username|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted py-3">No deposits logged for this period yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 
 {% endblock %}

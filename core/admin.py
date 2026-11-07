@@ -27,14 +27,33 @@ class TruckAdmin(admin.ModelAdmin):
 
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
-    list_display = ('category', 'amount', 'branch', 'truck', 'date', 'description_short')
-    list_filter = ('category', 'branch', 'date')
+    list_display = ('date', 'category', 'amount', 'payment_source', 'branch', 'truck', 'description_short')
+    list_filter = ('payment_source', 'category', 'branch', 'date')
     search_fields = ('description',)
     date_hierarchy = 'date'
+    actions = ['mark_bank_mobile', 'mark_cash']
 
     def description_short(self, obj):
         return obj.description[:50] + '...' if obj.description else ''
     description_short.short_description = 'Description'
+
+    @admin.action(description='Mark selected as paid by Bank / Mobile Money')
+    def mark_bank_mobile(self, request, queryset):
+        count = 0
+        for expense in queryset.exclude(payment_source='credit'):
+            expense.payment_source = 'bank_mobile'
+            expense.save(update_fields=['payment_source'])
+            count += 1
+        self.message_user(request, f'{count} expenses marked as Bank / Mobile Money.')
+
+    @admin.action(description='Mark selected as paid in Cash')
+    def mark_cash(self, request, queryset):
+        count = 0
+        for expense in queryset.exclude(payment_source='credit'):
+            expense.payment_source = 'cash'
+            expense.save(update_fields=['payment_source'])
+            count += 1
+        self.message_user(request, f'{count} expenses marked as Cash.')
 
 
 @admin.register(Production)
@@ -131,3 +150,11 @@ admin.site.register(Supplier)
 admin.site.register(SupplierBill)
 admin.site.register(SupplierPayment)
 admin.site.register(SpendingRequest)
+
+from .models import Target
+
+admin.site.register(Target)
+
+from .models import OpeningCash
+
+admin.site.register(OpeningCash)

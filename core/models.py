@@ -57,7 +57,57 @@ class Product(models.Model):
     def __str__(self):
         return f"{self.name} ({self.branch.name})"
 
+
+    # ── Block recipes, one per branch: edit these numbers if the mix changes ──
+    BLOCK_RECIPES = {
+        # 8 bags of 42.5 + 4 m3 sand -> 352 blocks
+        'same': {'cement': '42.5', 'blocks_per_bag': Decimal('44'),
+                 'sand_m3_per_bag': Decimal('0.5')},
+        # 6 bags of 32.5 + 2.2 m3 sand (full truck) -> 210 blocks
+        'ishinde': {'cement': '32.5', 'blocks_per_bag': Decimal('35'),
+                    'sand_m3_per_bag': Decimal('2.2') / Decimal('6')},
+    }
+    # Size of ONE unit of your sand product, in m3 (1 if sand is counted in m3)
+    SAND_UNIT_M3 = Decimal('1')
+
+    def _find_sand(self):
+        return Product.objects.filter(
+            branch=self.branch, is_raw_material=True
+        ).filter(
+            models.Q(name__icontains='sand') | models.Q(name__icontains='mchanga')
+        ).first()
+
+    def get_sand_product_id(self):
+        sand = self._find_sand()
+        return sand.id if sand else None
+
     def get_production_recipe(self):
+        """Returns {raw_product_id: quantity needed per finished block}."""
+        name_lower = self.name.lower()
+        if 'block' not in name_lower and 'tofali' not in name_lower:
+            return {}
+
+        spec = self.BLOCK_RECIPES.get(self.branch.name.strip().lower())
+        if not spec:
+            raise ValueError(f"No block recipe is set for the {self.branch.name} branch")
+
+        cement = Product.objects.filter(
+            branch=self.branch, name__icontains=spec['cement'], is_raw_material=True
+        ).first()
+        if not cement:
+            raise ValueError(f"Cement {spec['cement']} not found in the {self.branch.name} branch")
+
+        sand = self._find_sand()
+        if not sand:
+            raise ValueError("Sand not found in this branch")
+
+        blocks_per_bag = spec['blocks_per_bag']
+        return {
+            cement.id: Decimal('1') / blocks_per_bag,
+            sand.id: (spec['sand_m3_per_bag'] / blocks_per_bag) / self.SAND_UNIT_M3,
+        }
+
+    def get_production_recipe_old(self):
         """
         Returns dict of {raw_product_id: quantity_per_unit} for this finished product.
         Supports Cement 32.5 and 42.5 with different block production rates.
@@ -232,6 +282,9 @@ class Production(models.Model):
     quantity = models.DecimalField(max_digits=12, decimal_places=2)  # number of blocks produced
     raw_materials_consumed = models.JSONField(default=dict)          # e.g. {"cement_id": 10.5, "sand_id": 2.3}
     labor_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    material_cost = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    cost_note = models.CharField(max_length=255, blank=True)
     production_date = models.DateField(default=timezone.now)
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True)
@@ -500,3 +553,39 @@ class SpendingRequest(models.Model):
 
     def __str__(self):
         return f"Request #{self.id}: {self.amount} TZS ({self.status})"
+
+class Target(models.Model):
+    METRICS = [
+        ('sales', 'Sales (TZS)'),
+        ('gross_profit', 'Gross profit (TZS)'),
+        ('running_costs', 'Running costs limit (TZS)'),
+        ('production', 'Blocks produced'),
+    ]
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='targets')
+    year = models.PositiveSmallIntegerField()
+    month = models.PositiveSmallIntegerField()
+    metric = models.CharField(max_length=20, choices=METRICS)
+    value = models.DecimalField(max_digits=14, decimal_places=2)
+
+    class Meta:
+        unique_together = ('branch', 'year', 'month', 'metric')
+        ordering = ['-year', '-month', 'branch']
+
+    def __str__(self):
+        return f"{self.branch.name} {self.year}-{self.month:02d} {self.metric}: {self.value}"
+
+class OpeningCash(models.Model):
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='opening_cash')
+    year = models.PositiveSmallIntegerField()
+    month = models.PositiveSmallIntegerField()
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    note = models.CharField(max_length=255, blank=True)
+    counted_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        unique_together = ('branch', 'year', 'month')
+        ordering = ['-year', '-month', 'branch']
+
+    def __str__(self):
+        return f"{self.branch.name} {self.year}-{self.month:02d}: {self.amount}"

@@ -65,6 +65,34 @@ class SaleForm(forms.ModelForm):
 class ExpenseForm(forms.ModelForm):
     class Meta:
         model = Expense
+        fields = ['branch', 'truck', 'category', 'amount', 'payment_source',
+                  'description', 'receipt_image', 'date']
+        widgets = {
+            'date': forms.DateInput(attrs={'type': 'date'}),
+            'description': forms.Textarea(attrs={'rows': 3}),
+            'category': forms.Select(attrs={'class': 'form-select'}),
+            'payment_source': forms.Select(attrs={'class': 'form-select'}),
+        }
+        labels = {
+            'branch': _('Branch'),
+            'truck': _('Truck'),
+            'category': _('Category'),
+            'amount': _('Amount (TZS)'),
+            'payment_source': _('Paid by'),
+            'description': _('Description'),
+            'receipt_image': _('Receipt Image'),
+            'date': _('Date'),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['payment_source'].choices = [
+            ('cash', 'Cash'), ('bank_mobile', 'Bank / Mobile Money')]
+        self.fields['payment_source'].initial = 'cash'
+
+class ExpenseFormOld(forms.ModelForm):
+    class Meta:
+        model = Expense
         fields = ['branch', 'truck', 'category', 'amount', 'description', 'receipt_image', 'date']
         widgets = {
             'date': forms.DateInput(attrs={'type': 'date'}),
@@ -90,6 +118,12 @@ class ProductionForm(forms.ModelForm):
             'production_date': forms.DateInput(attrs={'type': 'date'}),
             'notes': forms.Textarea(attrs={'rows': 3}),
         }
+
+        sand_used = forms.DecimalField(
+        required=False, min_value=0, max_digits=12, decimal_places=2,
+        label='Sand actually used (m³) — leave empty to use the standard amount',
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+    )
 
     def __init__(self, *args, **kwargs):
         user = kwargs.pop('user', None)  # pass user from view
@@ -133,6 +167,30 @@ class BootstrapMixin:
             css = 'form-select' if isinstance(field.widget, forms.Select) else 'form-control'
             field.widget.attrs.setdefault('class', css)
 
+class OpeningCashForm(BootstrapMixin, forms.Form):
+    branch = forms.ModelChoiceField(
+        queryset=Branch.objects.filter(status='active'), required=False,
+        label='Branch (owner/admin only)')
+    year = forms.IntegerField(min_value=2024, max_value=2100)
+    month = forms.IntegerField(min_value=1, max_value=12)
+    amount = forms.DecimalField(max_digits=14, decimal_places=2, min_value=0,
+                                label='Cash counted at the start of the month (TZS)')
+    note = forms.CharField(max_length=255, required=False, label='Note — optional')
+
+class TargetForm(BootstrapMixin, forms.Form):
+    branch = forms.ModelChoiceField(queryset=Branch.objects.filter(status='active'))
+    year = forms.IntegerField(min_value=2024, max_value=2100)
+    month = forms.IntegerField(min_value=1, max_value=12)
+    sales = forms.DecimalField(max_digits=14, decimal_places=2, required=False, min_value=0,
+                               label='Sales target (TZS)')
+    gross_profit = forms.DecimalField(max_digits=14, decimal_places=2, required=False, min_value=0,
+                                      label='Gross profit target (TZS)')
+    running_costs = forms.DecimalField(max_digits=14, decimal_places=2, required=False, min_value=0,
+                                       label='Running costs limit (TZS)')
+    production = forms.DecimalField(max_digits=14, decimal_places=2, required=False, min_value=0,
+                                    label='Blocks to produce')
+    apply_to_rest_of_year = forms.BooleanField(
+        required=False, label='Use the same targets for every later month this year')
 
 class StockPurchaseForm(forms.Form):
     product = forms.ModelChoiceField(
@@ -168,7 +226,7 @@ class StockPurchaseForm(forms.Form):
     payment_method = forms.ChoiceField(
         choices=PAY_METHODS, required=False, initial='cash',
         widget=forms.Select(attrs={'class': 'form-select'}),
-        label='How the amount paid now was paid'
+        label='Paid by (for the amount paid now)'
     )
     due_date = forms.DateField(
         required=False,
@@ -381,3 +439,4 @@ class BankDepositForm(forms.ModelForm):
             'reference': _('Deposit Slip / Reference No.'),
             'notes': _('Notes'),
         }
+
