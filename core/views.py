@@ -2,7 +2,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Sum, F, Min, Q, ExpressionWrapper, DecimalField
+from django.db.models import Sum, F, Min, Max, Q, ExpressionWrapper, DecimalField
 from django.db.models.functions import TruncMonth, Coalesce
 from django.db import transaction
 from django.http import HttpResponse
@@ -1485,7 +1485,9 @@ def profit_and_loss(request):
         items_qs = items_qs.filter(sale__branch=branch)
         expenses_qs = expenses_qs.filter(branch=branch)
 
-    running_qs = expenses_qs.filter(is_stock_purchase=False, in_product_cost=False)
+    counted_qs = expenses_qs.filter(is_stock_purchase=False, in_product_cost=False)
+    running_qs = counted_qs.exclude(category='cost_of_sales')
+    direct_qs = counted_qs.filter(category='cost_of_sales')
     purchases_qs = expenses_qs.filter(is_stock_purchase=True)
 
     months_map = {
@@ -1502,7 +1504,8 @@ def profit_and_loss(request):
 
     def bucket(m):
         return data.setdefault(m, {
-            'revenue': 0.0, 'collected': 0.0, 'cogs': 0.0, 'running': 0.0, 'purchases': 0.0})
+            'revenue': 0.0, 'collected': 0.0, 'cogs': 0.0, 'running': 0.0,
+            'purchases': 0.0, 'direct': 0.0})
 
     for r in sales_qs.order_by().values('sale_date__month').annotate(
             rev=Sum('total_amount'), col=Sum('amount_paid')):
@@ -1515,17 +1518,20 @@ def profit_and_loss(request):
         bucket(r['date__month'])['running'] = float(r['t'] or 0)
     for r in purchases_qs.order_by().values('date__month').annotate(t=Sum('amount')):
         bucket(r['date__month'])['purchases'] = float(r['t'] or 0)
+    for r in direct_qs.order_by().values('date__month').annotate(t=Sum('amount')):
+        bucket(r['date__month'])['direct'] = float(r['t'] or 0)
 
     pl_table = []
     for m in sorted(data):
         d = data[m]
-        gross = d['revenue'] - d['cogs']
+        cost_total = d['cogs'] + d['direct']
+        gross = d['revenue'] - cost_total
         net = gross - d['running']
         pl_table.append({
             'month': months_map.get(m, '—'),
             'revenue': d['revenue'], 'collected': d['collected'],
             'outstanding': d['revenue'] - d['collected'],
-            'cogs': d['cogs'], 'gross_profit': gross,
+            'cogs': cost_total, 'direct': d['direct'], 'gross_profit': gross,
             'running': d['running'], 'net_profit': net,
             'purchases': d['purchases'],
             'margin': round(net / d['revenue'] * 100, 1) if d['revenue'] > 0 else 0,
@@ -1538,12 +1544,16 @@ def profit_and_loss(request):
     total_collected = total('collected')
     total_outstanding = total_revenue - total_collected
     total_cogs = total('cogs')
+    total_direct = total('direct')
     total_gross = total_revenue - total_cogs
     total_running = total('running')
     total_net = total_gross - total_running
     total_purchases = total('purchases')
     gross_margin = round(total_gross / total_revenue * 100, 1) if total_revenue > 0 else 0
     overall_margin = round(total_net / total_revenue * 100, 1) if total_revenue > 0 else 0
+    break_even = None
+    if total_revenue > 0 and total_gross > 0:
+        break_even = total_running / (total_gross / total_revenue)
 
     stock_products = Product.objects.filter(is_active=True, track_stock=True)
     if branch:
@@ -1582,6 +1592,7 @@ def profit_and_loss(request):
         'total_gross': total_gross, 'total_running': total_running,
         'total_net': total_net, 'total_purchases': total_purchases,
         'gross_margin': gross_margin, 'overall_margin': overall_margin,
+        'total_direct': total_direct, 'break_even': break_even,
         'stock_value': stock_value, 'products_missing_cost': products_missing_cost,
         'zero_cost_lines': zero_cost_lines, 'category_breakdown': category_breakdown,
         'branch': branch, 'title': f'Profit & Loss — {year}',
@@ -2222,7 +2233,9 @@ def month_actuals(branch, year, month):
     ).aggregate(t=Sum(cost_expr))['t'] or zero
 
     exp_qs = Expense.objects.filter(branch=branch, date__year=year, date__month=month)
-    running = exp_qs.filter(is_stock_purchase=False, in_product_cost=False).aggregate(t=Sum('amount'))['t'] or zero
+    counted = exp_qs.filter(is_stock_purchase=False, in_product_cost=False)
+    running = counted.exclude(category='cost_of_sales').aggregate(t=Sum('amount'))['t'] or zero
+    direct = counted.filter(category='cost_of_sales').aggregate(t=Sum('amount'))['t'] or zero
     produced = Production.objects.filter(
         branch=branch, production_date__year=year, production_date__month=month
     ).aggregate(t=Sum('quantity'))['t'] or zero
@@ -2256,7 +2269,7 @@ def month_actuals(branch, year, month):
 
     return {
         'sales': float(revenue),
-        'gross_profit': float(revenue - cogs),
+        'gross_profit': float(revenue - cogs - direct),
         'running_costs': float(running),
         'production': float(produced),
         'score': {
@@ -2395,4 +2408,112 @@ def target_set(request):
         'intro': 'Leave a box empty to keep its current target. Enter 0 to remove a target.',
         'submit_label': 'Save targets',
         'cancel_url': reverse('targets'),
+    })
+
+@role_required('admin', 'owner', 'branch_manager')
+def stock_performance(request):
+    scope = get_branch_filter(request.user)
+    branch_choices = Branch.objects.filter(status='active') if scope is None else None
+    branch = scope
+    if scope is None:
+        branch_id = request.GET.get('branch', '')
+        if branch_id.isdigit():
+            branch = Branch.objects.filter(id=int(branch_id)).first()
+
+    try:
+        days = int(request.GET.get('days', 30))
+    except ValueError:
+        days = 30
+    if days not in (7, 14, 30, 60, 90):
+        days = 30
+    status_filter = request.GET.get('status', 'all')
+    category = request.GET.get('category', '')
+    sort = request.GET.get('sort', 'value')
+
+    today = timezone.localdate()
+    first_sale = Sale.objects.aggregate(d=Min('sale_date'))['d'] or today
+    effective_days = max(1, min(days, (today - first_sale).days + 1))
+    since = today - timedelta(days=days - 1)
+
+    products = Product.objects.filter(is_active=True, track_stock=True, is_raw_material=False)
+    if branch:
+        products = products.filter(branch=branch)
+    if category:
+        products = products.filter(category=category)
+    products = products.select_related('branch')
+
+    sold = {
+        r['product_id']: r for r in SaleItem.objects.filter(
+            sale__sale_date__gte=since, product__in=products
+        ).values('product_id').annotate(qty=Sum('quantity'), revenue=Sum('total_price'))
+    }
+    last_sale = {
+        r['product_id']: r['d'] for r in SaleItem.objects.filter(product__in=products)
+        .values('product_id').annotate(d=Max('sale__sale_date'))
+    }
+
+    labels = {
+        'out': ('Out of stock, still selling', 'danger'),
+        'fast': ('Reorder soon', 'primary'),
+        'ok': ('OK', 'success'),
+        'slow': ('Over 90 days of stock', 'warning'),
+        'stuck': ('No sales in this period', 'warning'),
+        'never': ('Never sold', 'secondary'),
+    }
+    groups = {'reorder': {'out', 'fast'}, 'slow': {'slow', 'stuck', 'never'}}
+
+    rows = []
+    for p in products:
+        s = sold.get(p.id)
+        qty = float(s['qty']) if s else 0.0
+        revenue = float(s['revenue']) if s else 0.0
+        stock = float(p.current_stock)
+        daily = qty / effective_days
+        cover = None
+        if stock <= 0:
+            if qty <= 0:
+                continue
+            status = 'out'
+        elif qty == 0:
+            status = 'stuck' if p.id in last_sale else 'never'
+        else:
+            cover = stock / daily
+            status = 'fast' if cover <= 14 else ('slow' if cover > 90 else 'ok')
+
+        cost = float(p.cost_price or 0)
+        price = float(p.selling_price or 0)
+        rows.append({
+            'product': p, 'stock': stock, 'unit': p.unit,
+            'value': stock * cost if stock > 0 else 0.0,
+            'qty': qty, 'revenue': revenue, 'daily': daily, 'cover': cover,
+            'last_sale': last_sale.get(p.id),
+            'margin': round((price - cost) / price * 100) if price > 0 and cost > 0 else None,
+            'status': status, 'label': labels[status][0], 'css': labels[status][1],
+        })
+
+    total_value = sum(r['value'] for r in rows)
+    slow_value = sum(r['value'] for r in rows if r['status'] in groups['slow'])
+    reorder_count = sum(1 for r in rows if r['status'] in groups['reorder'])
+    slow_count = sum(1 for r in rows if r['status'] in groups['slow'])
+
+    if status_filter in groups:
+        rows = [r for r in rows if r['status'] in groups[status_filter]]
+
+    if sort == 'revenue':
+        rows.sort(key=lambda r: -r['revenue'])
+    elif sort == 'cover':
+        rows.sort(key=lambda r: (r['cover'] is None, r['cover'] or 0))
+    else:
+        sort = 'value'
+        rows.sort(key=lambda r: -r['value'])
+
+    return render(request, 'core/stock_performance.html', {
+        'title': 'Stock Performance',
+        'rows': rows, 'days': days, 'effective_days': effective_days,
+        'total_value': total_value, 'slow_value': slow_value,
+        'reorder_count': reorder_count, 'slow_count': slow_count,
+        'branch_choices': branch_choices, 'selected_branch': branch,
+        'status_filter': status_filter, 'category': category, 'sort': sort,
+        'categories': Product._meta.get_field('category').choices,
+        'day_options': (7, 14, 30, 60, 90),
     })

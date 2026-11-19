@@ -231,6 +231,12 @@
     </a>
     {% endif %}
         {% if user.role == 'admin' or user.role == 'owner' or user.role == 'branch_manager' %}
+    <a class="nav-link {% if request.resolver_match.url_name == 'stock_performance' %}active{% endif %}"
+       href="{% url 'stock_performance' %}">
+      <i class="bi bi-graph-up"></i> Stock Performance
+    </a>
+    {% endif %}
+        {% if user.role == 'admin' or user.role == 'owner' or user.role == 'branch_manager' %}
     <a class="nav-link {% if request.resolver_match.url_name == 'supplier_list' %}active{% endif %}"
        href="{% url 'supplier_list' %}">
       <i class="bi bi-people"></i> Suppliers

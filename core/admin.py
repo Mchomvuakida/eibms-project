@@ -31,11 +31,20 @@ class ExpenseAdmin(admin.ModelAdmin):
     list_filter = ('in_product_cost', 'payment_source', 'category', 'branch', 'date')
     search_fields = ('description',)
     date_hierarchy = 'date'
-    actions = ['mark_bank_mobile', 'mark_cash',  'mark_in_product_cost']
+    actions = ['mark_bank_mobile', 'mark_cash', 'mark_in_product_cost', 'move_to_cost_of_sales']
 
     def description_short(self, obj):
         return obj.description[:50] + '...' if obj.description else ''
     description_short.short_description = 'Description'
+
+    @admin.action(description='Move selected to Cost of Sales')
+    def move_to_cost_of_sales(self, request, queryset):
+        count = 0
+        for expense in queryset:
+            expense.category = 'cost_of_sales'
+            expense.save(update_fields=['category'])
+            count += 1
+        self.message_user(request, f'{count} expenses moved to Cost of Sales.')
 
     @admin.action(description='Mark selected as paid by Bank / Mobile Money')
     def mark_bank_mobile(self, request, queryset):

@@ -46,4 +46,5 @@ urlpatterns = [
     path('targets/', views.targets, name='targets'),
     path('targets/set/', views.target_set, name='target_set'),
     path('cash/opening/', views.opening_cash_set, name='opening_cash_set'),
+    path('stock-performance/', views.stock_performance, name='stock_performance'),
 ]

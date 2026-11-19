@@ -1,0 +1,110 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+{% block content %}
+
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      {% if branch_choices %}
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Branch</label>
+        <select name="branch" class="form-select">
+          <option value="">All</option>
+          {% for b in branch_choices %}<option value="{{ b.id }}" {% if selected_branch and b.id == selected_branch.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Sales period</label>
+        <select name="days" class="form-select">
+          {% for d in day_options %}<option value="{{ d }}" {% if d == days %}selected{% endif %}>Last {{ d }} days</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Category</label>
+        <select name="category" class="form-select">
+          <option value="">All</option>
+          {% for key, label in categories %}<option value="{{ key }}" {% if key == category %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Show</label>
+        <select name="status" class="form-select">
+          <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Everything</option>
+          <option value="reorder" {% if status_filter == 'reorder' %}selected{% endif %}>Reorder soon</option>
+          <option value="slow" {% if status_filter == 'slow' %}selected{% endif %}>Slow or not selling</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Sort by</label>
+        <select name="sort" class="form-select">
+          <option value="value" {% if sort == 'value' %}selected{% endif %}>Stock value</option>
+          <option value="revenue" {% if sort == 'revenue' %}selected{% endif %}>Sales</option>
+          <option value="cover" {% if sort == 'cover' %}selected{% endif %}>Days of stock left</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-primary w-100"><i class="bi bi-funnel me-1"></i> Show</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+    <div class="text-muted small mb-1">Stock value (at cost)</div>
+    <div class="fs-5 fw-bold text-primary">{{ total_value|floatformat:0|intcomma }} TZS</div>
+  </div></div></div>
+  <div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+    <div class="text-muted small mb-1">Tied up in slow or unsold items</div>
+    <div class="fs-5 fw-bold text-warning">{{ slow_value|floatformat:0|intcomma }} TZS</div>
+  </div></div></div>
+  <div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+    <div class="text-muted small mb-1">Products to reorder soon</div>
+    <div class="fs-5 fw-bold">{{ reorder_count }}</div>
+  </div></div></div>
+  <div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+    <div class="text-muted small mb-1">Slow or unsold products</div>
+    <div class="fs-5 fw-bold">{{ slow_count }}</div>
+  </div></div></div>
+</div>
+
+{% if effective_days < days %}
+<p class="text-muted small">EIBMS has only {{ effective_days }} day(s) of sales data so far, so rates are calculated over {{ effective_days }} days, not {{ days }}.</p>
+{% endif %}
+
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Product</th><th>Branch</th>
+          <th class="text-end">In stock</th><th class="text-end">Value (TZS)</th>
+          <th class="text-end">Sold</th><th class="text-end">Sales (TZS)</th>
+          <th class="text-end">Per day</th><th class="text-end">Days left</th>
+          <th>Last sale</th><th class="text-end">Margin</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.product.name }}</td>
+          <td class="small">{{ r.product.branch.name }}</td>
+          <td class="text-end">{{ r.stock|floatformat:0|intcomma }} {{ r.unit }}</td>
+          <td class="text-end">{{ r.value|floatformat:0|intcomma }}</td>
+          <td class="text-end">{{ r.qty|floatformat:0|intcomma }}</td>
+          <td class="text-end">{{ r.revenue|floatformat:0|intcomma }}</td>
+          <td class="text-end">{{ r.daily|floatformat:1 }}</td>
+          <td class="text-end">{% if r.cover is not None %}{{ r.cover|floatformat:0 }}{% else %}—{% endif %}</td>
+          <td class="small">{% if r.last_sale %}{{ r.last_sale|date:"d M" }}{% else %}never{% endif %}</td>
+          <td class="text-end">{% if r.margin is not None %}{{ r.margin }}%{% else %}—{% endif %}</td>
+          <td><span class="badge bg-{{ r.css }}">{{ r.label }}</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="11" class="text-center text-muted py-4">Nothing to show for these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

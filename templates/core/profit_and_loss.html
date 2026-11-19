@@ -47,6 +47,17 @@
 </div>
 {% endif %}
 
+{% if break_even %}
+<div class="alert alert-info">
+  <i class="bi bi-bullseye me-2"></i>
+  <strong>Break-even for this period:</strong> at your current gross margin ({{ gross_margin }}%),
+  you need about <strong>{{ break_even|floatformat:0|intcomma }} TZS</strong> of sales to cover the running costs
+  of {{ total_running|floatformat:0|intcomma }} TZS.
+  Actual sales: {{ total_revenue|floatformat:0|intcomma }} TZS
+  ({% widthratio total_revenue break_even 100 %}% of break-even).
+  <span class="text-muted">This is only as reliable as the costs entered. For a full month, filter by that month.</span>
+</div>
+{% endif %}
 <div class="row g-3 mb-3">
   <div class="col-md-3">
     <div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
@@ -58,6 +69,7 @@
     <div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
       <div class="text-muted small mb-1">Cost of goods sold</div>
       <div class="fs-5 fw-bold text-danger">{{ total_cogs|floatformat:0|intcomma }} TZS</div>
+      {% if total_direct %}<div class="text-muted small">incl. {{ total_direct|floatformat:0|intcomma }} direct costs</div>{% endif %}
     </div></div>
   </div>
   <div class="col-md-3">

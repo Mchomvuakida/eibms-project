@@ -225,7 +225,8 @@ class TripLog(models.Model):
         return f"Trip {self.truck} - {self.date}"
 
 EXPENSE_CATEGORIES = [
-    ('raw_materials', 'Raw Materials & Inputs (cement, sand, aggregates, timber)'),
+    ('raw_materials', 'Raw Materials & Inputs (bought for production; stock goes through Stock Purchase)'),
+    ('cost_of_sales', 'Cost of Sales (sand, timber, levies, hauling, loading for goods you sell)'),
     ('production_labor', 'Production Labor & Wages'),
     ('truck_operations', 'Truck Operations (fuel, diesel, petrol, delivery)'),
     ('truck_maintenance', 'Truck Repairs & Maintenance'),
