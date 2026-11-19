@@ -255,6 +255,9 @@ class Expense(models.Model):
     ]
     payment_source = models.CharField(max_length=20, choices=PAYMENT_SOURCES, default='cash')
     is_stock_purchase = models.BooleanField(default=False)
+    in_product_cost = models.BooleanField(
+        default=False,
+        help_text="Already counted in a product's cost (production labour or materials). Kept for the cash record only.")
 
     def __str__(self):
         return f"{self.category} - {self.amount} TZS"

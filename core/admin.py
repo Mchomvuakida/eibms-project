@@ -27,11 +27,11 @@ class TruckAdmin(admin.ModelAdmin):
 
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
-    list_display = ('date', 'category', 'amount', 'payment_source', 'branch', 'truck', 'description_short')
-    list_filter = ('payment_source', 'category', 'branch', 'date')
+    list_display = ('date', 'category', 'amount', 'payment_source', 'in_product_cost', 'branch', 'truck', 'description_short')
+    list_filter = ('in_product_cost', 'payment_source', 'category', 'branch', 'date')
     search_fields = ('description',)
     date_hierarchy = 'date'
-    actions = ['mark_bank_mobile', 'mark_cash']
+    actions = ['mark_bank_mobile', 'mark_cash',  'mark_in_product_cost']
 
     def description_short(self, obj):
         return obj.description[:50] + '...' if obj.description else ''
@@ -54,6 +54,15 @@ class ExpenseAdmin(admin.ModelAdmin):
             expense.save(update_fields=['payment_source'])
             count += 1
         self.message_user(request, f'{count} expenses marked as Cash.')
+
+    @admin.action(description='Mark selected as already counted in product cost')
+    def mark_in_product_cost(self, request, queryset):
+        count = 0
+        for expense in queryset:
+            expense.in_product_cost = True
+            expense.save(update_fields=['in_product_cost'])
+            count += 1
+        self.message_user(request, f'{count} expenses marked as already in product cost.')
 
 
 @admin.register(Production)

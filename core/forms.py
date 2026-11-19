@@ -89,6 +89,9 @@ class ExpenseForm(forms.ModelForm):
         self.fields['payment_source'].choices = [
             ('cash', 'Cash'), ('bank_mobile', 'Bank / Mobile Money')]
         self.fields['payment_source'].initial = 'cash'
+        self.fields['category'].choices = [
+            (key, label) for key, label in self.fields['category'].choices
+            if key != 'production_labor']
 
 class ExpenseFormOld(forms.ModelForm):
     class Meta:
@@ -123,6 +126,12 @@ class ProductionForm(forms.ModelForm):
         required=False, min_value=0, max_digits=12, decimal_places=2,
         label='Sand actually used (m³) — leave empty to use the standard amount',
         widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+    )
+        labor_paid_by = forms.ChoiceField(
+        choices=[('cash', 'Cash'), ('bank_mobile', 'Bank / Mobile Money')],
+        initial='cash', required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Labour paid by',
     )
 
     def __init__(self, *args, **kwargs):

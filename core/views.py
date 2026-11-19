@@ -1074,6 +1074,14 @@ def production_create(request):
                     production.cost_note = (
                         ('No cost price for: ' + ', '.join(missing_cost))[:255] if missing_cost else '')
                     production.save()
+                    if production.labor_cost and production.labor_cost > 0:
+                        Expense.objects.create(
+                            branch=production.branch, category='production_labor',
+                            amount=production.labor_cost,
+                            description=f'Production labour: {production.product.name} (production #{production.id})',
+                            date=production.production_date,
+                            payment_source=form.cleaned_data.get('labor_paid_by') or 'cash',
+                            in_product_cost=True)
                     InventoryLog.objects.create(
                         product=finished,
                         branch=production.branch,
@@ -1477,7 +1485,7 @@ def profit_and_loss(request):
         items_qs = items_qs.filter(sale__branch=branch)
         expenses_qs = expenses_qs.filter(branch=branch)
 
-    running_qs = expenses_qs.filter(is_stock_purchase=False)
+    running_qs = expenses_qs.filter(is_stock_purchase=False, in_product_cost=False)
     purchases_qs = expenses_qs.filter(is_stock_purchase=True)
 
     months_map = {
@@ -2214,7 +2222,7 @@ def month_actuals(branch, year, month):
     ).aggregate(t=Sum(cost_expr))['t'] or zero
 
     exp_qs = Expense.objects.filter(branch=branch, date__year=year, date__month=month)
-    running = exp_qs.filter(is_stock_purchase=False).aggregate(t=Sum('amount'))['t'] or zero
+    running = exp_qs.filter(is_stock_purchase=False, in_product_cost=False).aggregate(t=Sum('amount'))['t'] or zero
     produced = Production.objects.filter(
         branch=branch, production_date__year=year, production_date__month=month
     ).aggregate(t=Sum('quantity'))['t'] or zero
