@@ -1486,8 +1486,9 @@ def profit_and_loss(request):
         expenses_qs = expenses_qs.filter(branch=branch)
 
     counted_qs = expenses_qs.filter(is_stock_purchase=False, in_product_cost=False)
-    running_qs = counted_qs.exclude(category='cost_of_sales')
-    direct_qs = counted_qs.filter(category='cost_of_sales')
+    direct_categories = ['cost_of_sales', 'production_labor']
+    running_qs = counted_qs.exclude(category__in=direct_categories)
+    direct_qs = counted_qs.filter(category__in=direct_categories)
     purchases_qs = expenses_qs.filter(is_stock_purchase=True)
 
     months_map = {
@@ -2234,8 +2235,9 @@ def month_actuals(branch, year, month):
 
     exp_qs = Expense.objects.filter(branch=branch, date__year=year, date__month=month)
     counted = exp_qs.filter(is_stock_purchase=False, in_product_cost=False)
-    running = counted.exclude(category='cost_of_sales').aggregate(t=Sum('amount'))['t'] or zero
-    direct = counted.filter(category='cost_of_sales').aggregate(t=Sum('amount'))['t'] or zero
+    direct_categories = ['cost_of_sales', 'production_labor']
+    running = counted.exclude(category__in=direct_categories).aggregate(t=Sum('amount'))['t'] or zero
+    direct = counted.filter(category__in=direct_categories).aggregate(t=Sum('amount'))['t'] or zero
     produced = Production.objects.filter(
         branch=branch, production_date__year=year, production_date__month=month
     ).aggregate(t=Sum('quantity'))['t'] or zero

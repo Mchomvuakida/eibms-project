@@ -89,10 +89,7 @@ class ExpenseForm(forms.ModelForm):
         self.fields['payment_source'].choices = [
             ('cash', 'Cash'), ('bank_mobile', 'Bank / Mobile Money')]
         self.fields['payment_source'].initial = 'cash'
-        self.fields['category'].choices = [
-            (key, label) for key, label in self.fields['category'].choices
-            if key != 'production_labor']
-
+       
 class ExpenseFormOld(forms.ModelForm):
     class Meta:
         model = Expense
@@ -116,7 +113,7 @@ class ExpenseFormOld(forms.ModelForm):
 class ProductionForm(forms.ModelForm):
     class Meta:
         model = Production
-        fields = ['product', 'quantity', 'labor_cost', 'notes', 'production_date']
+        fields = ['product', 'quantity', 'notes', 'production_date']
         widgets = {
             'production_date': forms.DateInput(attrs={'type': 'date'}),
             'notes': forms.Textarea(attrs={'rows': 3}),
@@ -131,7 +128,6 @@ class ProductionForm(forms.ModelForm):
         choices=[('cash', 'Cash'), ('bank_mobile', 'Bank / Mobile Money')],
         initial='cash', required=False,
         widget=forms.Select(attrs={'class': 'form-select'}),
-        label='Labour paid by',
     )
 
     def __init__(self, *args, **kwargs):
